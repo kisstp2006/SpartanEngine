@@ -3,6 +3,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+print ("Warning: This is not the offical Spartan Engine or source code, you can download the original source code from 'https://github.com/PanosK92/SpartanEngine'")
+
+
 def main():
     script_dir = Path(__file__).parent
     os.chdir(script_dir)

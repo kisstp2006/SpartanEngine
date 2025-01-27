@@ -23,8 +23,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "FileDialog.h"
 #include "../ImGui/Source/imgui_internal.h"
 #include "../ImGui/Source/imgui_stdlib.h"
-#include "Rendering/Mesh.h"
 #include "../Widgets/Viewport.h"
+#include "Rendering/Mesh.h"
+#include <Rendering/Material.h>
 //=========================================
 
 //= NAMESPACES ===============
@@ -564,7 +565,7 @@ void FileDialog::EmptyAreaContextMenu()
 
     if (ImGui::MenuItem("Create folder"))
     {
-        FileSystem::CreateDirectory(m_current_path + "/New folder");
+        FileSystem::CreateDirectory_(m_current_path + "/New folder");
         m_is_dirty = true;
     }
 

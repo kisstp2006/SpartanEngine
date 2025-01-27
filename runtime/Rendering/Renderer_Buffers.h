@@ -75,45 +75,14 @@ namespace spartan
         math::Vector2 padding;
 
         math::Vector3 wind;
-        float padding2;
+        float gamma;
 
         void set_bit(const bool set, const uint32_t bit)
         {
             options = set ? (options |= bit) : (options & ~bit);
         }
 
-        bool operator==(const Cb_Frame& rhs) const
-        {
-            return
-                view                        == rhs.view                        &&
-                projection                  == rhs.projection                  &&
-                view_projection             == rhs.view_projection             &&
-                view_projection_inv         == rhs.view_projection_inv         &&
-                view_projection_ortho       == rhs.view_projection_ortho       &&
-                view_projection_unjittered  == rhs.view_projection_unjittered  &&
-                view_projection_previous    == rhs.view_projection_previous    &&
-                time                        == rhs.time                        &&
-                delta_time                  == rhs.delta_time                  &&
-                frame                       == rhs.frame                       &&
-                camera_near                 == rhs.camera_near                 &&
-                camera_far                  == rhs.camera_far                  &&
-                camera_position             == rhs.camera_position             &&
-                camera_position_previous    == rhs.camera_position_previous    &&
-                camera_direction            == rhs.camera_direction            &&
-                camera_last_movement_time   == rhs.camera_last_movement_time   &&
-                resolution_output           == rhs.resolution_output           &&
-                resolution_render           == rhs.resolution_render           &&
-                taa_jitter_current          == rhs.taa_jitter_current          &&
-                taa_jitter_previous         == rhs.taa_jitter_previous         &&
-                resolution_scale            == rhs.resolution_scale            &&
-                hdr_enabled                 == rhs.hdr_enabled                 &&
-                hdr_max_nits                == rhs.hdr_max_nits                &&
-                hdr_white_point             == rhs.hdr_white_point             &&
-                directional_light_intensity == rhs.directional_light_intensity &&
-                options                     == rhs.options                     &&
-                wind                        == rhs.wind;
-        }
-
+        bool operator==(const Cb_Frame& rhs) const { return memcmp(this, &rhs, sizeof(Cb_Frame)) == 0; }
         bool operator!=(const Cb_Frame& rhs) const { return !(*this == rhs); }
     };
 
@@ -188,8 +157,6 @@ namespace spartan
         {
             return transform == rhs.transform && m_value == rhs.m_value;
         }
-
-        bool operator!=(const Pcb_Pass& rhs) const { return !(*this == rhs); }
     };
 
     struct Sb_Material
@@ -234,18 +201,6 @@ namespace spartan
         uint32_t flags;
         math::Vector2 padding;
 
-        bool operator==(const Sb_Light& rhs)
-        {
-            return
-                view_projection[0] == rhs.view_projection[0] &&
-                view_projection[1] == rhs.view_projection[1] &&
-                intensity          == rhs.intensity          &&
-                range              == rhs.range              &&
-                angle              == rhs.angle              &&
-                color              == rhs.color              &&
-                position           == rhs.position           &&
-                direction          == rhs.direction          &&
-                flags              == rhs.flags;
-        }
+        bool operator==(const Sb_Light& rhs) const { return memcmp(this, &rhs, sizeof(Sb_Light)) == 0; }
     };
 }

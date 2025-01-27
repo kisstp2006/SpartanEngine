@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../RHI/RHI_CommandList.h"
 #include "../RHI/RHI_Buffer.h"
 #include "../RHI/RHI_Shader.h"
+#include "../Rendering/Material.h"
 #ifdef _MSC_VER
 #include "../RHI/RHI_FidelityFX.h"
 #endif
@@ -895,11 +896,11 @@ namespace spartan
         }
 
         // perform early resource transitions
-        tex_color->SetLayout(RHI_Image_Layout::Shader_Read, cmd_list);
-        tex_normal->SetLayout(RHI_Image_Layout::Shader_Read, cmd_list);
-        tex_material->SetLayout(RHI_Image_Layout::Shader_Read, cmd_list);
-        tex_velocity->SetLayout(RHI_Image_Layout::Shader_Read, cmd_list);
-        tex_depth->SetLayout(RHI_Image_Layout::Shader_Read, cmd_list);
+        tex_color->SetLayout(RHI_Image_Layout::General, cmd_list);
+        tex_normal->SetLayout(RHI_Image_Layout::General, cmd_list);
+        tex_material->SetLayout(RHI_Image_Layout::General, cmd_list);
+        tex_velocity->SetLayout(RHI_Image_Layout::General, cmd_list);
+        tex_depth->SetLayout(RHI_Image_Layout::General, cmd_list);
         cmd_list->InsertPendingBarrierGroup();
 
         cmd_list->EndTimeblock();
@@ -947,7 +948,7 @@ namespace spartan
             RHI_FidelityFX::SSSR_Dispatch(
                 cmd_list,
                 GetOption<float>(Renderer_Option::ResolutionScale),
-                GetRenderTarget(Renderer_RenderTarget::frame_render), // reflect from the previous frame
+                GetRenderTarget(Renderer_RenderTarget::frame_render_pre_post_process),
                 GetRenderTarget(Renderer_RenderTarget::gbuffer_depth),
                 GetRenderTarget(Renderer_RenderTarget::gbuffer_velocity),
                 GetRenderTarget(Renderer_RenderTarget::gbuffer_normal),
@@ -1397,8 +1398,8 @@ namespace spartan
         const uint32_t resolution_x       = tex_environment->GetWidth()  >> mip_level;
         const uint32_t resolution_y       = tex_environment->GetHeight() >> mip_level;
         cmd_list->Dispatch(
-            static_cast<uint32_t>(math::helper::Ceil(static_cast<float>(resolution_y) / thread_group_count)),
-            static_cast<uint32_t>(math::helper::Ceil(static_cast<float>(resolution_y) / thread_group_count))
+            static_cast<uint32_t>(ceil(static_cast<float>(resolution_y) / thread_group_count)),
+            static_cast<uint32_t>(ceil(static_cast<float>(resolution_y) / thread_group_count))
         );
 
         m_environment_mips_to_filter_count--;
@@ -1545,8 +1546,8 @@ namespace spartan
 
                 // Blend
                 uint32_t thread_group_count    = 8;
-                uint32_t thread_group_count_x_ = static_cast<uint32_t>(math::helper::Ceil(static_cast<float>(mip_width_large) / thread_group_count));
-                uint32_t thread_group_count_y_ = static_cast<uint32_t>(math::helper::Ceil(static_cast<float>(mip_height_height) / thread_group_count));
+                uint32_t thread_group_count_x_ = static_cast<uint32_t>(ceil(static_cast<float>(mip_width_large) / thread_group_count));
+                uint32_t thread_group_count_y_ = static_cast<uint32_t>(ceil(static_cast<float>(mip_height_height) / thread_group_count));
                 cmd_list->Dispatch(thread_group_count_x_, thread_group_count_y_);
             }
         }

@@ -58,6 +58,8 @@ namespace spartan
         void SetVsync(const bool enabled);
         bool GetVsync();
 
+        // loop
+        void AcquireNextImage();
         void Present();
 
         // properties
@@ -79,7 +81,6 @@ namespace spartan
     private:
         void Create();
         void Destroy();
-        void AcquireNextImage();
 
         // main
         bool m_windowed                 = false;
@@ -90,7 +91,7 @@ namespace spartan
         RHI_Present_Mode m_present_mode = RHI_Present_Mode::Immediate;
 
         // misc
-        uint32_t m_sync_index                                = std::numeric_limits<uint32_t>::max();
+        uint32_t m_buffer_index                              = std::numeric_limits<uint32_t>::max();
         uint32_t m_image_index                               = std::numeric_limits<uint32_t>::max();
         void* m_sdl_window                                   = nullptr;
         std::array<RHI_Image_Layout, buffer_count> m_layouts = { RHI_Image_Layout::Max };

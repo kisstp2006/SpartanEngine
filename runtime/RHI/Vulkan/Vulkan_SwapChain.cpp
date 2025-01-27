@@ -201,7 +201,6 @@ namespace spartan
         m_present_mode = present_mode;
 
         Create();
-        AcquireNextImage();
 
         SP_SUBSCRIBE_TO_EVENT(EventType::WindowResized, SP_EVENT_HANDLER(ResizeToWindowSize));
     }
@@ -241,8 +240,8 @@ namespace spartan
         SP_ASSERT_MSG(is_format_and_color_space_supported(surface, &m_format, color_space), "The surface doesn't support the requested format");
 
         // clamp size between the supported min and max
-        m_width  = math::helper::Clamp(m_width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-        m_height = math::helper::Clamp(m_height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+        m_width  = clamp(m_width,  capabilities.minImageExtent.width,  capabilities.maxImageExtent.width);
+        m_height = clamp(m_height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
 
         // swap chain
         VkSwapchainKHR swap_chain;
@@ -255,7 +254,7 @@ namespace spartan
             create_info.imageColorSpace           = color_space;
             create_info.imageExtent               = { m_width, m_height };
             create_info.imageArrayLayers          = 1;
-            create_info.imageUsage                = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // fer rendering on it
+            create_info.imageUsage                = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // for rendering on it
             create_info.imageUsage               |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;     // for blitting to it
 
             uint32_t queueFamilyIndices[] = { RHI_Device::GetQueueIndex(RHI_Queue_Type::Compute), RHI_Device::GetQueueIndex(RHI_Queue_Type::Graphics) };
@@ -395,7 +394,7 @@ namespace spartan
 
         // reset indices
         m_image_index = numeric_limits<uint32_t>::max();
-        m_sync_index  = numeric_limits<uint32_t>::max();
+        m_buffer_index  = numeric_limits<uint32_t>::max();
 
         Destroy();
         Create();
@@ -411,18 +410,18 @@ namespace spartan
 
     void RHI_SwapChain::AcquireNextImage()
     {
-        if (m_sync_index != numeric_limits<uint32_t>::max())
+        // when we run out of buffers, wait
+        if (m_buffer_index != numeric_limits<uint32_t>::max())
         {
-            m_image_acquired_fence[m_sync_index]->Wait();
-            m_image_acquired_fence[m_sync_index]->Reset();
+            m_image_acquired_fence[m_buffer_index]->Wait();
+            m_image_acquired_fence[m_buffer_index]->Reset();
         }
 
         // get sync objects
-        m_sync_index                        = (m_sync_index + 1) % m_buffer_count;
-        RHI_SyncPrimitive* signal_semaphore = m_image_acquired_semaphore[m_sync_index].get();
-        RHI_SyncPrimitive* signal_fence     = m_image_acquired_fence[m_sync_index].get();
+        m_buffer_index                      = (m_buffer_index + 1) % m_buffer_count;
+        RHI_SyncPrimitive* signal_semaphore = m_image_acquired_semaphore[m_buffer_index].get();
+        RHI_SyncPrimitive* signal_fence     = m_image_acquired_fence[m_buffer_index].get();
 
-        // acquire next image
         SP_ASSERT_VK(vkAcquireNextImageKHR(
             RHI_Context::device,                                          // device
             static_cast<VkSwapchainKHR>(m_rhi_swapchain),                 // swapchain
@@ -440,28 +439,20 @@ namespace spartan
         m_wait_semaphores.clear();
         RHI_Queue* queue = RHI_Device::GetQueue(RHI_Queue_Type::Graphics);
 
-        // semaphores from command lists
+        // get semaphores from command lists
         RHI_CommandList* cmd_list       = queue->GetCommandList();
         bool presents_to_this_swapchain = cmd_list->GetSwapchainId() == m_object_id;
-        bool has_work_to_present        = cmd_list->GetState() == RHI_CommandListState::Submitted;
-        if (presents_to_this_swapchain && has_work_to_present)
+        if (presents_to_this_swapchain)
         {
             RHI_SyncPrimitive* semaphore = cmd_list->GetRenderingCompleteSemaphore();
-            if (semaphore->IsSignaled())
-            {
-                semaphore->SetSignaled(false);
-            }
-
             m_wait_semaphores.emplace_back(semaphore);
         }
 
-        // semaphore from vkAcquireNextImageKHR
-        RHI_SyncPrimitive* image_acquired_semaphore = m_image_acquired_semaphore[m_sync_index].get();
+        // get semaphore from vkAcquireNextImageKHR
+        RHI_SyncPrimitive* image_acquired_semaphore = m_image_acquired_semaphore[m_buffer_index].get();
         m_wait_semaphores.emplace_back(image_acquired_semaphore);
 
-        // present
         queue->Present(m_rhi_swapchain, m_image_index, m_wait_semaphores);
-        AcquireNextImage();
     }
 
     void RHI_SwapChain::SetLayout(const RHI_Image_Layout& layout, RHI_CommandList* cmd_list)

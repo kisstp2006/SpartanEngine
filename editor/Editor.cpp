@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 //= INCLUDES ====================================
 #include "Editor.h"
-#include "EditorWindows.h"
+#include "GeneralWindows.h"
 #include "MenuBar.h"
 #include "Core/Engine.h"
 #include "Core/Settings.h"
@@ -87,7 +87,6 @@ Editor::Editor(const vector<string>& args)
 
     // initialization of some helper static classes
     IconLoader::Initialize();
-    EditorHelper::Initialize(this);
 
     // create all imgui widgets
     m_widgets.emplace_back(make_shared<Style>(this));
@@ -111,7 +110,7 @@ Editor::Editor(const vector<string>& args)
     // register imgui as a third party library (will show up in the about window)
     spartan::Settings::RegisterThirdPartyLib("ImGui", IMGUI_VERSION, "https://github.com/ocornut/imgui");
 
-    EditorWindows::Initialize(this);
+    GeneralWindows::Initialize(this);
 }
 
 Editor::~Editor()
@@ -158,8 +157,8 @@ void Editor::Tick()
 
                 ImGui::End();
 
-                // various windows that don't belnog to a certain widget
-                EditorWindows::Tick();
+                // various windows that don't belong to a certain widget
+                GeneralWindows::Tick();
             }
         }
 
@@ -168,7 +167,7 @@ void Editor::Tick()
         {
             ImGui::Render();
 
-            if (spartan::Renderer::CanUseCmdList())
+            if (spartan::Engine::IsFlagSet(spartan::EngineMode::EditorVisible))
             {
                 // main window
                 ImGui::RHI::render(ImGui::GetDrawData());

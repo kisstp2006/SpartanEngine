@@ -74,8 +74,8 @@ namespace spartan
         // find max character height (todo, actually get spacing from FreeType)
         for (const auto& char_info : m_glyphs)
         {
-            m_char_max_width    = helper::Max<int>(char_info.second.width, m_char_max_width);
-            m_char_max_height   = helper::Max<int>(char_info.second.height, m_char_max_height);
+            m_char_max_width    = max(char_info.second.width, m_char_max_width);
+            m_char_max_height   = max(char_info.second.height, m_char_max_height);
         }
 
         SP_LOG_INFO("Loading \"%s\" took %d ms", FileSystem::GetFileNameFromFilePath(file_path).c_str(), static_cast<int>(timer.GetElapsedTimeMs()));
@@ -168,7 +168,7 @@ namespace spartan
 
     void Font::SetSize(const uint32_t size)
     {
-        m_font_size = helper::Clamp<uint32_t>(size, 8, 50);
+        m_font_size = clamp<uint32_t>(size, 8, 50);
     }
 
     void Font::UpdateVertexAndIndexBuffers(RHI_CommandList* cmd_list)
@@ -220,49 +220,8 @@ namespace spartan
             }
         }
 
-        // wait until the buffers are not in use
-        cmd_list->InsertBarrierBufferReadWrite(m_buffer_vertex.get());
-        cmd_list->InsertBarrierBufferReadWrite(m_buffer_index.get());
-
-        // update vertex buffer in chunks
-        {
-            const size_t vertex_size = sizeof(m_vertices[0]);
-            size_t size              = m_vertices.size() * vertex_size;
-            size_t offset            = 0;
-
-            // zero out
-            memset(m_buffer_vertex->GetMappedData(), 0, m_buffer_vertex->GetObjectSize());
-
-            // update
-            while (offset < size)
-            {
-                size_t current_chunk_size = min(static_cast<size_t>(rhi_max_buffer_update_size), size - offset);
-
-                cmd_list->UpdateBuffer(m_buffer_vertex.get(), offset, current_chunk_size, &m_vertices[offset / vertex_size]);
-
-                offset += current_chunk_size;
-            }
-        }
-
-        // update index buffer in chunks
-        {
-            const size_t index_size = sizeof(m_indices[0]);
-            size_t size             = m_indices.size() * index_size;
-            size_t offset           = 0;
-
-            // zero out
-            memset(m_buffer_index->GetMappedData(), 0, m_buffer_index->GetObjectSize());
-
-            // update
-            while (offset < size)
-            {
-                size_t current_chunk_size = min(static_cast<size_t>(rhi_max_buffer_update_size), size - offset);
-
-                cmd_list->UpdateBuffer(m_buffer_index.get(), offset, current_chunk_size, &m_indices[offset / index_size]);
-
-                offset += current_chunk_size;
-            }
-        }
+        cmd_list->UpdateBuffer(m_buffer_vertex.get(), 0, m_buffer_vertex->GetObjectSize(), m_vertices.data(), true);
+        cmd_list->UpdateBuffer(m_buffer_index.get(), 0, m_buffer_index->GetObjectSize(), m_indices.data(), true);
 
         m_font_data.clear();
     }

@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../../IO/FileStream.h"
 #include "../../Resource/ResourceCache.h"
 #include "../../Rendering/Mesh.h"
+#include "../../Rendering/Material.h"
 #include "../../Core/ThreadPool.h"
 #include "../../Core/ProgressTracker.h"
 #include "../../Core/GeometryProcessing.h"
@@ -538,21 +539,21 @@ namespace spartan
 
         if (terrain_prop == TerrainProp::Tree)
         {
-            max_slope                   = 30.0f * math::helper::DEG_TO_RAD;
+            max_slope                   = 30.0f * math::deg_to_rad;
             rotate_match_surface_normal = false; // trees tend to grow upwards, towards the sun
             terrain_offset              = -0.5f;
         }
 
         if (terrain_prop == TerrainProp::Plant)
         {
-            max_slope                   = 40.0f * math::helper::DEG_TO_RAD;
+            max_slope                   = 40.0f * math::deg_to_rad;
             rotate_match_surface_normal = true; // small plants tend to grow towards the sun but they can have some wonky angles due to low mass
             terrain_offset              = 0.0f;
         }
 
         if (terrain_prop == TerrainProp::Grass)
         {
-            max_slope                   = 40.0f * math::helper::DEG_TO_RAD;
+            max_slope                   = 40.0f * math::deg_to_rad;
             rotate_match_surface_normal = true;
             terrain_offset              = -0.9f;
         }

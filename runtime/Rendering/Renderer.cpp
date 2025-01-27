@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //= INCLUDES ===============================
 #include "pch.h"
 #include "Renderer.h"
+#include "Material.h"
 #include "ThreadPool.h"
 #include "ProgressTracker.h"
 #include "../Profiling/RenderDoc.h"
@@ -59,6 +60,7 @@ namespace spartan
     vector<RHI_Vertex_PosCol> Renderer::m_lines_vertices;
 
     // misc
+    bool wants_to_present                                         = false;
     uint32_t Renderer::m_resource_index                           = 0;
     atomic<bool> Renderer::m_initialized_resources                = false;
     atomic<bool> Renderer::m_initialized_third_party              = false;
@@ -147,37 +149,40 @@ namespace spartan
             RHI_Device::Initialize();
         }
 
-        // set options (after the device has been created since it can clamp values like max shadow resolution etc)
-        m_options.clear();
-        SetOption(Renderer_Option::WhitePoint,                  350.0f);
-        SetOption(Renderer_Option::Tonemapping,                 static_cast<float>(Renderer_Tonemapping::Max));
-        SetOption(Renderer_Option::Bloom,                       1.0f);                                                 // non-zero values activate it and control the intensity
-        SetOption(Renderer_Option::MotionBlur,                  1.0f);
-        SetOption(Renderer_Option::DepthOfField,                1.0f);
-        SetOption(Renderer_Option::ScreenSpaceAmbientOcclusion, 1.0f);
-        SetOption(Renderer_Option::ScreenSpaceShadows,          static_cast<float>(Renderer_ScreenspaceShadow::Bend));
-        SetOption(Renderer_Option::ScreenSpaceReflections,      1.0f);
-        SetOption(Renderer_Option::GlobalIllumination,          0.5f);                                                 // 0.5 is the percentage of the internal resolution (options are 25%, 50%, 75% and 100%)
-        SetOption(Renderer_Option::Anisotropy,                  16.0f);
-        SetOption(Renderer_Option::ShadowResolution,            4096.0f);
-        SetOption(Renderer_Option::Exposure,                    1.0f);
-        SetOption(Renderer_Option::Sharpness,                   0.0f);                                                 // becomes the upsampler's sharpness as well
-        SetOption(Renderer_Option::Fog,                         1.0f);                                                 // controls the intensity of the volumetric fog as well
-        SetOption(Renderer_Option::FogVolumetric,               1.0f);                                                 // these is only a toggle for the volumetric fog
-        SetOption(Renderer_Option::Antialiasing,                static_cast<float>(Renderer_Antialiasing::Taa));       // this is using fsr 3 for taa
-        SetOption(Renderer_Option::Upsampling,                  static_cast<float>(Renderer_Upsampling::Fsr3));
-        SetOption(Renderer_Option::ResolutionScale,             1.0f);
-        SetOption(Renderer_Option::VariableRateShading,         0.0f);
-        SetOption(Renderer_Option::Vsync,                       0.0f);
-        SetOption(Renderer_Option::TransformHandle,             1.0f);
-        SetOption(Renderer_Option::SelectionOutline,            1.0f);
-        SetOption(Renderer_Option::Grid,                        1.0f);
-        SetOption(Renderer_Option::Lights,                      1.0f);
-        SetOption(Renderer_Option::Physics,                     0.0f);
-        SetOption(Renderer_Option::PerformanceMetrics,          1.0f);
-        SetOption(Renderer_Option::OcclusionCulling,            0.0f);                                                 // disabled by default as it's a WIP (you can see the query delays)
+        // options
+        {
+            m_options.clear();
+            SetOption(Renderer_Option::WhitePoint,                  350.0f);
+            SetOption(Renderer_Option::Tonemapping,                 static_cast<float>(Renderer_Tonemapping::Max));
+            SetOption(Renderer_Option::Bloom,                       1.0f);                                                 // non-zero values activate it and control the intensity
+            SetOption(Renderer_Option::MotionBlur,                  1.0f);
+            SetOption(Renderer_Option::DepthOfField,                1.0f);
+            SetOption(Renderer_Option::ScreenSpaceAmbientOcclusion, 1.0f);
+            SetOption(Renderer_Option::ScreenSpaceShadows,          static_cast<float>(Renderer_ScreenspaceShadow::Bend));
+            SetOption(Renderer_Option::ScreenSpaceReflections,      1.0f);
+            SetOption(Renderer_Option::GlobalIllumination,          0.5f);                                                 // 0.5 is the percentage of the internal resolution (options are 25%, 50%, 75% and 100%)
+            SetOption(Renderer_Option::Anisotropy,                  16.0f);
+            SetOption(Renderer_Option::ShadowResolution,            4096.0f);
+            SetOption(Renderer_Option::Sharpness,                   0.0f);                                                 // becomes the upsampler's sharpness as well
+            SetOption(Renderer_Option::Fog,                         1.0f);                                                 // controls the intensity of the volumetric fog as well
+            SetOption(Renderer_Option::FogVolumetric,               1.0f);                                                 // these is only a toggle for the volumetric fog
+            SetOption(Renderer_Option::Antialiasing,                static_cast<float>(Renderer_Antialiasing::Taa));       // this is using fsr 3 for taa
+            SetOption(Renderer_Option::Upsampling,                  static_cast<float>(Renderer_Upsampling::Fsr3));
+            SetOption(Renderer_Option::ResolutionScale,             1.0f);
+            SetOption(Renderer_Option::VariableRateShading,         0.0f);
+            SetOption(Renderer_Option::Vsync,                       0.0f);
+            SetOption(Renderer_Option::TransformHandle,             1.0f);
+            SetOption(Renderer_Option::SelectionOutline,            1.0f);
+            SetOption(Renderer_Option::Grid,                        1.0f);
+            SetOption(Renderer_Option::Lights,                      1.0f);
+            SetOption(Renderer_Option::Physics,                     0.0f);
+            SetOption(Renderer_Option::PerformanceMetrics,          1.0f);
+            SetOption(Renderer_Option::OcclusionCulling,            0.0f);                                                 // disabled by default as it's a WIP (you can see the query delays)
+            SetOption(Renderer_Option::Exposure,                    1.0f);
+            SetOption(Renderer_Option::Gamma,                       Display::GetGamma());
 
-        SetWind(Vector3(1.0f, 0.0f, 0.5f));
+            SetWind(Vector3(1.0f, 0.0f, 0.5f));
+        }
 
         // resolution
         {
@@ -291,8 +296,11 @@ namespace spartan
     void Renderer::Tick()
     {
         // don't waste cpu/gpu time if nothing can be seen
+        wants_to_present = false;
         if (Window::IsMinimized() || !m_initialized_resources)
             return;
+
+        wants_to_present = true;
 
         // logic
         {
@@ -308,6 +316,8 @@ namespace spartan
 
         // rendering
         {
+            GetSwapChain()->AcquireNextImage();
+
             // get resources
             RHI_Queue* queue_graphics          = RHI_Device::GetQueue(RHI_Queue_Type::Graphics);
             RHI_Queue* queue_compute           = RHI_Device::GetQueue(RHI_Queue_Type::Compute);
@@ -484,6 +494,7 @@ namespace spartan
         m_cb_frame_cpu.hdr_enabled                 = GetOption<bool>(Renderer_Option::Hdr) ? 1.0f : 0.0f;
         m_cb_frame_cpu.hdr_max_nits                = Display::GetLuminanceMax();
         m_cb_frame_cpu.hdr_white_point             = GetOption<float>(Renderer_Option::WhitePoint);
+        m_cb_frame_cpu.gamma                       = GetOption<float>(Renderer_Option::Gamma);
         m_cb_frame_cpu.directional_light_intensity = get_directional_light_intensity_lumens(m_renderables[Renderer_Entity::Light]);
 
         // these must match what common_buffer.hlsl is reading
@@ -543,12 +554,6 @@ namespace spartan
         m_mutex_renderables.unlock();
         bindless_materials_dirty = true;
         bindless_lights_dirty    = true;
-    }
-
-    bool Renderer::CanUseCmdList()
-    {
-        RHI_CommandList* cmd_list = RHI_Device::GetQueue(RHI_Queue_Type::Graphics)->GetCommandList();
-        return cmd_list->GetState() == RHI_CommandListState::Recording;
     }
 
     const Vector3& Renderer::GetWind()
@@ -660,16 +665,16 @@ namespace spartan
             // anisotropy
             if (option == Renderer_Option::Anisotropy)
             {
-                value = helper::Clamp(value, 0.0f, 16.0f);
+                value = clamp(value, 0.0f, 16.0f);
             }
             // shadow resolution
             else if (option == Renderer_Option::ShadowResolution)
             {
-                value = helper::Clamp(value, static_cast<float>(resolution_shadow_min), static_cast<float>(RHI_Device::PropertyGetMaxTexture2dDimension()));
+                value = clamp(value, static_cast<float>(resolution_shadow_min), static_cast<float>(RHI_Device::PropertyGetMaxTexture2dDimension()));
             }
             else if (option == Renderer_Option::ResolutionScale)
             {
-                value = helper::Clamp(value, 0.5f, 1.0f);
+                value = clamp(value, 0.5f, 1.0f);
             }
         }
 
@@ -827,6 +832,9 @@ namespace spartan
 
     void Renderer::SubmitAndPresent()
     {
+        if (!wants_to_present)
+            return;
+
         RHI_Queue* queue          = RHI_Device::GetQueue(RHI_Queue_Type::Graphics);
         RHI_CommandList* cmd_list = queue->GetCommandList();
 
@@ -840,6 +848,8 @@ namespace spartan
             swap_chain->Present();
         }
         Profiler::TimeBlockEnd();
+
+        wants_to_present = false;
     }
 
     RHI_Api_Type Renderer::GetRhiApiType()

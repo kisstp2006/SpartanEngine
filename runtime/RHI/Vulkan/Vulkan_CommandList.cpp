@@ -26,7 +26,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../RHI_Implementation.h"
 #include "../RHI_Pipeline.h"
 #include "../RHI_Buffer.h"
-#include "../RHI_Sampler.h"
 #include "../RHI_DescriptorSet.h"
 #include "../RHI_DescriptorSetLayout.h"
 #include "../RHI_SyncPrimitive.h"
@@ -477,7 +476,7 @@ namespace spartan
         begin_info.sType                    = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         SP_ASSERT_MSG(vkBeginCommandBuffer(static_cast<VkCommandBuffer>(m_rhi_resource), &begin_info) == VK_SUCCESS, "Failed to begin command buffer");
 
-        // enable breadcrumbs for this commannd list
+        // enable breadcrumbs for this command list
         if (Debugging::IsBreadcrumbsEnabled() && (queue->GetType() != RHI_Queue_Type::Copy) && !immediate)
         {
             RHI_FidelityFX::Breadcrumbs_RegisterCommandList(this, queue, m_rendering_complete_semaphore_timeline->GetObjectName().c_str());
@@ -1452,10 +1451,10 @@ namespace spartan
 
         uint64_t start    = queries::timestamp::data[index_timestamp];
         uint64_t end      = queries::timestamp::data[index_timestamp + 1];
-        uint64_t duration = math::helper::Clamp<uint64_t>(end - start, 0, numeric_limits<uint64_t>::max());
+        uint64_t duration = clamp<uint64_t>(end - start, 0, numeric_limits<uint64_t>::max());
         float duration_ms = static_cast<float>(duration * RHI_Device::PropertyGetTimestampPeriod() * 1e-6f);
 
-        return math::helper::Clamp<float>(duration_ms, 0.0f, numeric_limits<float>::max());
+        return clamp(duration_ms, 0.0f, numeric_limits<float>::max());
     }
 
     void RHI_CommandList::BeginOcclusionQuery(const uint64_t entity_id)
@@ -1564,15 +1563,19 @@ namespace spartan
         m_timeblock_active = nullptr;
     }
 
-    void RHI_CommandList::UpdateBuffer(RHI_Buffer* buffer, const uint64_t offset, const uint64_t size, const void* data)
+    void RHI_CommandList::UpdateBuffer(RHI_Buffer* buffer, const uint64_t offset, const uint64_t size, const void* data, const bool zero_out)
     {
         SP_ASSERT(buffer);
         SP_ASSERT(size);
         SP_ASSERT(data);
         SP_ASSERT(offset + size <= buffer->GetObjectSize());
 
-        // check for vkCmdUpdateBuffer compliance to deduce if this is a small and synchronized update
-        // non-compliant updates are done via a memcpy, and they are there for the big bindless arrays
+        if (zero_out)
+        { 
+            memset(buffer->GetMappedData(), 0, buffer->GetObjectSize());
+        }
+
+        // check for vkCmdUpdateBuffer compliance
         bool synchronized_update  = true;
         synchronized_update      &= (offset % 4 == 0);                    // offset must be a multiple of 4
         synchronized_update      &= (size % 4 == 0);                      // size must be a multiple of 4
@@ -1631,15 +1634,10 @@ namespace spartan
             vkCmdPipelineBarrier2(static_cast<VkCommandBuffer>(m_rhi_resource), &dependency_info);
             Profiler::m_rhi_pipeline_barriers++;
         }
-        else // big bindless arrays (update rarely and don't require synchronization)
+        else // big bindless arrays
         {
             void* mapped_data = static_cast<char*>(buffer->GetMappedData()) + offset;
             memcpy(mapped_data, data, size);
-
-            if (buffer->GetType() != RHI_Buffer_Type::Storage)
-            {
-                SP_LOG_WARNING("Updated a non-storage buffer with memcpy. Consider using vkCmdUpdateBuffer for synchronized updates.");
-            }
         }
     }
 

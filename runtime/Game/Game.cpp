@@ -35,6 +35,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../Core/ProgressTracker.h"
 #include "../Rendering/Mesh.h"
 #include "../Rendering/Renderer.h"
+#include "../Rendering/Material.h"
 #include "../Resource/ResourceCache.h"
 #include "../Input/Input.h"
 //============================================
@@ -263,8 +264,8 @@ namespace spartan
                         {
                             // create material
                             shared_ptr<Material> material = make_shared<Material>();
-                            material->SetTexture(MaterialTextureType::Color, "project\\models\\wheel\\albedo.jpeg");
-                            material->SetTexture(MaterialTextureType::Normal, "project\\models\\wheel\\normal.png");
+                            material->SetTexture(MaterialTextureType::Color,     "project\\models\\wheel\\albedo.jpeg");
+                            material->SetTexture(MaterialTextureType::Normal,    "project\\models\\wheel\\normal.png");
                             material->SetTexture(MaterialTextureType::Roughness, "project\\models\\wheel\\roughness.png");
                             material->SetTexture(MaterialTextureType::Metalness, "project\\models\\wheel\\metalness.png");
 
@@ -709,14 +710,15 @@ namespace spartan
                 light->SetFlag(LightFlags::Volumetric, false); // volumetric fog looks bad with point lights
             }
 
-            float scale = 2.0f; // I actually walked in sponza, it's that big
+            Vector3 position = Vector3(0.0f, 1.5f, 0.0f);
+            float scale      = 2.0f; // I actually walked in sponza, it's that big
 
             // 3d model - Sponza
             if (shared_ptr<Mesh> mesh = ResourceCache::Load<Mesh>("project\\models\\sponza\\main\\NewSponza_Main_Blender_glTF.gltf"))
             {
                 shared_ptr<Entity> entity = mesh->GetRootEntity().lock();
                 entity->SetObjectName("sponza");
-                entity->SetPosition(Vector3(0.0f, 1.5f, 0.0f));
+                entity->SetPosition(position);
                 entity->SetScale(scale);
 
                 // make the lamp frame not cast shadows
@@ -749,7 +751,7 @@ namespace spartan
             {
                 shared_ptr<Entity> entity = mesh->GetRootEntity().lock();
                 entity->SetObjectName("sponza_curtains");
-                entity->SetPosition(Vector3(0.0f, 0.15f, 0.0f));
+                entity->SetPosition(position);
                 entity->SetScale(scale);
 
                 // disable back face culling and enable wind
@@ -788,7 +790,7 @@ namespace spartan
             {
                 shared_ptr<Entity> entity = mesh->GetRootEntity().lock();
                 entity->SetObjectName("sponza_ivy");
-                entity->SetPosition(Vector3(0.0f, 0.15f, 0.0f));
+                entity->SetPosition(position);
                 entity->SetScale(scale);
 
                 if (Material* material = entity->GetDescendantByName("IvySim_Leaves")->GetComponent<Renderable>()->GetMaterial())
@@ -1055,6 +1057,8 @@ namespace spartan
                     }
                 }
             }
+
+            Renderer::SetOption(Renderer_Option::Grid, 0.0f);
         }
     }
 

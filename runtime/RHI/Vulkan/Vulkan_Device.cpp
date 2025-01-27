@@ -148,26 +148,33 @@ namespace spartan
 
                 // choose the version which is supported by both the sdk and the driver
                 uint32_t sdk_version = VK_HEADER_VERSION_COMPLETE;
-                app_info.apiVersion  = helper::Min(sdk_version, driver_version);
-
-                // 1.3 the minimum required version as we are using extensions from 1.3
-                if (app_info.apiVersion < VK_API_VERSION_1_3)
-                { 
-                    SP_ERROR_WINDOW("Your machine doesn't support Vulkan 1.3");
-                }
-
-                // in case the SDK is not supported by the driver, prompt the user to update
-                if (sdk_version > driver_version)
-                {
-                    // detect and log version
-                    string driver_version_str = to_string(VK_API_VERSION_MAJOR(driver_version)) + "." + to_string(VK_API_VERSION_MINOR(driver_version)) + "." + to_string(VK_API_VERSION_PATCH(driver_version));
-                    string sdk_version_str    = to_string(VK_API_VERSION_MAJOR(sdk_version))    + "." + to_string(VK_API_VERSION_MINOR(sdk_version)) + "." + to_string(VK_API_VERSION_PATCH(sdk_version));
-                    SP_LOG_WARNING("Using Vulkan %s, update drivers or wait for GPU vendor to support Vulkan %s, engine may still work", driver_version_str.c_str(), sdk_version_str.c_str());
-                }
+                app_info.apiVersion  = min(sdk_version, driver_version);
 
                 // save the api version we ended up using
                 version::used                = app_info.apiVersion;
                 RHI_Context::api_version_str = version::to_string();
+
+                // some checks
+                {
+                    // if the driver hasn't been updated to the latest SDK, log a warning
+                    if (sdk_version > driver_version)
+                    {
+                        string version_driver = to_string(VK_API_VERSION_MAJOR(driver_version)) + "." + to_string(VK_API_VERSION_MINOR(driver_version)) + "." + to_string(VK_API_VERSION_PATCH(driver_version));
+                        string version_sdk    = to_string(VK_API_VERSION_MAJOR(sdk_version))    + "." + to_string(VK_API_VERSION_MINOR(sdk_version)) + "." + to_string(VK_API_VERSION_PATCH(sdk_version));
+                        SP_LOG_WARNING("Using Vulkan %s, update drivers or wait for GPU vendor to support Vulkan %s, engine may still work", version_driver.c_str(), version_sdk.c_str());
+
+                    }
+
+                    // ensure that the machine supports Vulkan 1.4 (as we are using extensions from it)
+                    uint32_t driver_major = VK_API_VERSION_MAJOR(driver_version);
+                    uint32_t driver_minor = VK_API_VERSION_MINOR(driver_version);
+                    uint32_t min_major    = VK_API_VERSION_MAJOR(VK_API_VERSION_1_4);
+                    uint32_t min_minor    = VK_API_VERSION_MINOR(VK_API_VERSION_1_4);
+                    if (driver_major < min_major || (driver_major == min_major && driver_minor < min_minor))
+                    { 
+                        SP_ERROR_WINDOW("Your machine doesn't support Vulkan 1.4");
+                    }
+                }
             }
 
             return app_info;
@@ -231,15 +238,15 @@ namespace spartan
         vector<const char*> extensions_device   = {
             "VK_KHR_swapchain",
             "VK_EXT_memory_budget",           // to obtain precise memory usage information from Vulkan Memory Allocator
-            "VK_KHR_fragment_shading_rate",
-            "VK_EXT_hdr_metadata",
-            "VK_EXT_robustness2",
+            "VK_KHR_fragment_shading_rate",   
+            "VK_EXT_hdr_metadata",            
+            "VK_EXT_robustness2",             
             "VK_KHR_external_memory",         // to share images with Intel Open Image Denoise
-            #if defined(_MSC_VER)
+            #if defined(_MSC_VER)             
             "VK_KHR_external_memory_win32",   // external memory handle type, linux alternative: VK_KHR_external_memory_fd
             #endif
-            "VK_KHR_synchronization2",        // needed by AMD FidelityFX - Breadcrumbs
-            "VK_KHR_get_memory_requirements2" // needed by AMD FidelityFX - FSR 3
+            "VK_KHR_synchronization2",        // this is part of Vulkan 1.4 but AMD FidelityFX Breadcrumbs without it (they fetch device pointers from some table)
+            "VK_KHR_get_memory_requirements2" // this is part of Vulkan 1.4 but AMD FidelityFX FSR 3 crashes without it (they fetch device pointers from some table)
         };
 
         bool is_present_device(const char* extension_name, VkPhysicalDevice device_physical)
@@ -290,15 +297,6 @@ namespace spartan
                     SP_LOG_WARNING("Device extension \"%s\" is not supported", extension);
                 }
             }
-
-            // check and add VK_KHR_portability_subset if present
-            // this extension is needed for portability across different platforms and
-            // must be enabled if the physical device supports it
-            //const char* portability_extension = "VK_KHR_portability_subset";
-            //if (is_present_device(portability_extension, RHI_Context::device_physical))
-            //{
-            //    extensions_supported.emplace_back(portability_extension);
-            //}
 
             return extensions_supported;
         }
@@ -425,22 +423,6 @@ namespace spartan
                         // QueryPool VkQueryPool 0x980b0000000002e[query_pool_occlusion] and query 0 : vkCmdBeginQuery() was never called.
                         return VK_FALSE;
                     }
-
-                    // present after write and write after present
-                    // [ SYNC-HAZARD-WRITE-AFTER-PRESENT ]: vkQueueSubmit2(): Hazard WRITE_AFTER_PRESENT for entry 0, VkCommandBuffer
-                    // 0x1d7ba33cc80[cmd_list_0], Submitted access info (submitted_usage: SYNC_IMAGE_LAYOUT_TRANSITION, command:
-                    // vkCmdPipelineBarrier2, seq_no: 15, reset_no: 120, debug_region: imgui_window_main). Access info (prior_usage:
-                    // SYNC_PRESENT_ENGINE_SYNCVAL_PRESENT_PRESENTED_SYNCVAL, write_barriers: 0, queue: VkQueue 0x1d7ba2ef110[graphics],
-                    // submit: 387, batch: 0, batch_tag: 9363, vkQueuePresentKHR present_tag:9363, pSwapchains[0]: VkSwapchainKHR
-                    // 0x210d07000000003a[], image_index: 1image: VkImage 0x9f9b41000000003c[swapchain_image_1]).
-                    // 
-                    // [ SYNC-HAZARD-PRESENT-AFTER-WRITE ]: vkQueuePresentKHR(): Hazard PRESENT_AFTER_WRITE for present pSwapchains[0],
-                    // swapchain VkSwapchainKHR 0x210d07000000003a[], image index 0 VkImage 0x5eb05e000000003b[swapchain_image_0],
-                    // Access info (usage: SYNC_PRESENT_ENGINE_SYNCVAL_PRESENT_PRESENTED_SYNCVAL, prior_usage: SYNC_IMAGE_LAYOUT_TRANSITION,
-                    // write_barriers: 0, queue: VkQueue 0x1d7ba2ef110[graphics], submit: 2988, batch: 0, batch_tag: 91515, command:
-                    // vkCmdPipelineBarrier2, command_buffer: VkCommandBuffer 0x1d7bfd21870[cmd_list_1], seq_no: 62, reset_no: 1419).
-                    if (p_callback_data->messageIdNumber == 0xe17ab4ae || p_callback_data->messageIdNumber == 0x42f2f4ed)
-                        return VK_FALSE;
                 }
 
                 string msg = "Vulkan: " + string(p_callback_data->pMessage);
@@ -1060,6 +1042,7 @@ namespace spartan
     {
         VkPhysicalDeviceFeatures2 features                          = {};
         VkPhysicalDeviceRobustness2FeaturesEXT features_robustness  = {};
+        VkPhysicalDeviceVulkan14Features features_1_4               = {};
         VkPhysicalDeviceVulkan13Features features_1_3               = {};
         VkPhysicalDeviceVulkan12Features features_1_2               = {};
         VkPhysicalDeviceFragmentShadingRateFeaturesKHR features_vrs = {};
@@ -1067,31 +1050,48 @@ namespace spartan
         void detect(bool* is_shading_rate_supported)
         {
             // features that will be enabled
+            features_vrs.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+            features_vrs.pNext = nullptr;
+            
             features_robustness.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
-            features_vrs.sType        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
             features_robustness.pNext = &features_vrs;
-            features_1_3.sType        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-            features_1_3.pNext        = &features_robustness;
-            features_1_2.sType        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-            features_1_2.pNext        = &features_1_3;
-            features.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-            features.pNext            = &features_1_2;
+            
+            features_1_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+            features_1_2.pNext = &features_robustness;
+            
+            features_1_3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+            features_1_3.pNext = &features_1_2;
+            
+            features_1_4.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
+            features_1_4.pNext = &features_1_3;
+            
+            features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+            features.pNext = &features_1_4;
 
-            // features which are supported
+            // detect which features are supported
             VkPhysicalDeviceFragmentShadingRateFeaturesKHR support_vrs = {};
-            support_vrs.sType                                          = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
-            VkPhysicalDeviceRobustness2FeaturesEXT support_robustness  = {};
-            support_robustness.sType                                   = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
-            support_robustness.pNext                                   = &support_vrs;
-            VkPhysicalDeviceVulkan13Features support_1_3               = {};
-            support_1_3.sType                                          = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-            support_1_3.pNext                                          = &support_robustness;
-            VkPhysicalDeviceVulkan12Features support_1_2               = {};
-            support_1_2.sType                                          = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-            support_1_2.pNext                                          = &support_1_3;
-            VkPhysicalDeviceFeatures2 support                          = {};
-            support.sType                                              = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-            support.pNext                                              = &support_1_2;
+            support_vrs.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+            
+            VkPhysicalDeviceRobustness2FeaturesEXT support_robustness = {};
+            support_robustness.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
+            support_robustness.pNext = &support_vrs;
+            
+            VkPhysicalDeviceVulkan12Features support_1_2 = {};
+            support_1_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+            support_1_2.pNext = &support_robustness;
+            
+            VkPhysicalDeviceVulkan13Features support_1_3 = {};
+            support_1_3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+            support_1_3.pNext = &support_1_2;
+            
+            VkPhysicalDeviceVulkan14Features support_1_4 = {};
+            support_1_4.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
+            support_1_4.pNext = &support_1_3;
+            
+            VkPhysicalDeviceFeatures2 support = {};
+            support.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+            support.pNext = &support_1_4;
+            
             vkGetPhysicalDeviceFeatures2(RHI_Context::device_physical, &support);
 
             // check if certain features are supported and enable them
@@ -1174,6 +1174,10 @@ namespace spartan
 
                     SP_ASSERT(support_robustness.nullDescriptor == VK_TRUE);
                     features_robustness.nullDescriptor = VK_TRUE;
+
+                    // AMD doesn't support Vulkan 1.4 yet, so we'll wait on it.
+                    //SP_ASSERT(support_1_4.pushDescriptor == VK_TRUE);
+                    //features_1_4.pushDescriptor = VK_TRUE;
                 }
 
                 // fidelity fx
@@ -1828,11 +1832,6 @@ namespace spartan
 
     void RHI_Device::MemoryBufferCreate(void*& resource, const uint64_t size, uint32_t flags_usage, uint32_t flags_memory, const void* data_initial, const char* name)
     {
-        // deduce properties
-        bool is_storage   = (flags_usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)   != 0;
-        bool is_constant  = (flags_usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)   != 0;
-        bool is_mappable  = (flags_memory & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0;
-
         // buffer info
         VkBufferCreateInfo buffer_create_info = {};
         buffer_create_info.sType              = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1843,14 +1842,14 @@ namespace spartan
         // allocation info
         VmaAllocationCreateInfo allocation_create_info = {};
         allocation_create_info.usage                   = VMA_MEMORY_USAGE_AUTO;
-        allocation_create_info.requiredFlags           = flags_memory;
-        allocation_create_info.flags                   = 0;
+        allocation_create_info.flags                   = 0;            // flags vma
+        allocation_create_info.requiredFlags           = flags_memory; // flags vulkan
 
+        bool is_mappable = (flags_memory & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0;
         if (is_mappable)
         {
-            allocation_create_info.flags         |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-            allocation_create_info.flags         |= VMA_ALLOCATION_CREATE_MAPPED_BIT;     // mappable
-            allocation_create_info.requiredFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT; // flushless
+            allocation_create_info.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+            allocation_create_info.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT; // mappable
         }
 
         // create the buffer
@@ -1866,7 +1865,7 @@ namespace spartan
         );
 
         // if a pointer to the buffer data has been passed, map the buffer and copy over the data
-        if (data_initial != nullptr)
+        if (data_initial)
         {
             SP_ASSERT_MSG(is_mappable, "Mapping initial data requires the buffer to be created with a VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT memory flag");
 

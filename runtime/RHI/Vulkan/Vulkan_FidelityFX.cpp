@@ -394,7 +394,7 @@ namespace spartan
                 description_context.fpMessage              = &ffx_message_callback;
                 #endif
                 description_context.backendInterface       = ffx_interface;
-                
+
                 // context
                 SP_ASSERT(ffxFsr3UpscalerContextCreate(&context, &description_context) == FFX_OK);
                 context_created = true;
@@ -916,7 +916,7 @@ namespace spartan
         }
 
         // release static resources now so that they register
-        // themselfs with the RHI for deletion before engine shutdown
+        // themselves with the RHI for deletion before engine shutdown
         brixelizer_gi::texture_sdf_atlas       = nullptr;
         brixelizer_gi::buffer_brick_aabbs      = nullptr;
         brixelizer_gi::buffer_scratch          = nullptr;
@@ -1141,17 +1141,17 @@ namespace spartan
         sssr::description_dispatch.normalUnPackMul                      = 1.0f;
         sssr::description_dispatch.normalUnPackAdd                      = 0.0f;
         sssr::description_dispatch.depthBufferThickness                 = 0.08f; // hit acceptance bias, larger values can cause streaks, lower values can cause holes
-        sssr::description_dispatch.varianceThreshold                    = 0.02f; // luminance differences between history results will trigger an additional ray if they are greater than this threshold value
-        sssr::description_dispatch.maxTraversalIntersections            = 20;    // caps the maximum number of lookups that are performed from the depth buffer hierarchy, most rays should end after about 20 lookups
+        sssr::description_dispatch.varianceThreshold                    = 0.04f; // luminance differences between history results will trigger an additional ray if they are greater than this threshold value
+        sssr::description_dispatch.maxTraversalIntersections            = 100;   // caps the maximum number of lookups that are performed from the depth buffer hierarchy, most rays should end after about 20 lookups
         sssr::description_dispatch.minTraversalOccupancy                = 4;     // exit the core loop early if less than this number of threads are running
-        sssr::description_dispatch.mostDetailedMip                      = 0;
+        sssr::description_dispatch.mostDetailedMip                      = 0;     
         sssr::description_dispatch.temporalStabilityFactor              = 0.8f;  // the accumulation of history values, higher values reduce noise, but are more likely to exhibit ghosting artifacts
         sssr::description_dispatch.temporalVarianceGuidedTracingEnabled = true;  // whether a ray should be spawned on pixels where a temporal variance is detected or not
         sssr::description_dispatch.samplesPerQuad                       = 1;     // the minimum number of rays per quad, variance guided tracing can increase this up to a maximum of 4
-        sssr::description_dispatch.iblFactor                            = 0.0f;
-        sssr::description_dispatch.roughnessChannel                     = 0;
-        sssr::description_dispatch.isRoughnessPerceptual                = true;
-        sssr::description_dispatch.roughnessThreshold                   = 1.0f;  // regions with a roughness value greater than this threshold won't spawn rays
+        sssr::description_dispatch.iblFactor                            = 0.0f;  
+        sssr::description_dispatch.roughnessChannel                     = 0;     
+        sssr::description_dispatch.isRoughnessPerceptual                = true;  
+        sssr::description_dispatch.roughnessThreshold                   = 0.9f;  // regions with a roughness value greater than this threshold won't spawn rays
 
         // set camera matrices
         set_ffx_float16(sssr::description_dispatch.view,               view);

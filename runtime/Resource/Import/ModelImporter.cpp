@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../../RHI/RHI_Texture.h"
 #include "../../Rendering/Animation.h"
 #include "../../Rendering/Mesh.h"
+#include "../../Rendering/Material.h"
 #include "../../World/World.h"
 #include "../../World/Entity.h"
 #include "../../World/Components/Light.h"
@@ -159,7 +160,7 @@ namespace spartan
             const string file_path_no_ext = FileSystem::GetFilePathWithoutExtension(file_path);
 
             // Check if the file exists using all engine supported extensions
-            for (const auto& supported_format : supported_formats_image)
+            for (const auto& supported_format : FileSystem::GetSupportedImageFormats())
             {
                 string new_file_path = file_path_no_ext + supported_format;
                 string new_file_path_upper = file_path_no_ext + FileSystem::ConvertToUppercase(supported_format);

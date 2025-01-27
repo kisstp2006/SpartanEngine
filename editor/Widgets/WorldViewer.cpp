@@ -34,7 +34,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "World/Components/Camera.h"
 #include "Commands/CommandStack.h"
 #include "Input/Input.h"
-#include "FileSystem.h"
+#include "FileSystem/FileSystem.h"
 #include "Core/Engine.h"
 #include "../ImGui/ImGui_Extension.h"
 SP_WARNINGS_OFF
@@ -474,7 +474,10 @@ void WorldViewer::HandleKeyShortcuts()
         }
         else
         {
-            EditorHelper::SaveWorld(spartan::World::GetFilePath());
+            spartan::ThreadPool::AddTask([]()
+            {
+                spartan::World::SaveToFile(spartan::World::GetFilePath());
+            });
         }
     }
 

@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 //= INCLUDES =====================
 #include "MenuBar.h"
-#include "EditorWindows.h"
+#include "GeneralWindows.h"
 #include "Widgets/Profiler.h"
 #include "Widgets/ShaderEditor.h"
 #include "Widgets/RenderOptions.h"
@@ -94,7 +94,11 @@ namespace
                 {
                     if (spartan::FileSystem::IsEngineSceneFile(file_dialog_selection_path))
                     {
-                        EditorHelper::LoadWorld(file_dialog_selection_path);
+                        spartan::ThreadPool::AddTask([]()
+                        {
+                            spartan::World::LoadFromFile(file_dialog_selection_path);
+                        });
+
                         show_file_dialog = false;
                     }
                 }
@@ -103,7 +107,11 @@ namespace
                 {
                     if (file_dialog->GetFilter() == FileDialog_Filter_World)
                     {
-                        EditorHelper::SaveWorld(file_dialog_selection_path);
+                        spartan::ThreadPool::AddTask([]()
+                        {
+                            spartan::World::SaveToFile(file_dialog_selection_path);
+                        });
+
                         show_file_dialog = false;
                     }
                 }
@@ -155,7 +163,7 @@ namespace
         {
             if (ImGui::BeginMenu("View"))
             {
-                if (ImGui::MenuItem("Shortcuts & Input Reference", "Ctrl+P", EditorWindows::GetVisiblityWindowShortcuts()))
+                if (ImGui::MenuItem("Shortcuts & Input Reference", "Ctrl+P", GeneralWindows::GetVisiblityWindowShortcuts()))
                 {
 
                 }
@@ -193,7 +201,7 @@ namespace
         {
             if (ImGui::BeginMenu("Help"))
             {
-                ImGui::MenuItem("About", nullptr, EditorWindows::GetVisiblityWindowAbout());
+                ImGui::MenuItem("About", nullptr, GeneralWindows::GetVisiblityWindowAbout());
 
                 if (ImGui::MenuItem("Sponsor", nullptr, nullptr))
                 {

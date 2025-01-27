@@ -42,19 +42,19 @@ float3 sample_environment(float2 uv, float mip_level, float mip_max)
     return tex_environment.SampleLevel(samplers[sampler_trilinear_clamp], uv, mip_level).rgb;
 }
 
-float get_blend_weight(float value, float threshold, float smoothness)
+float get_blend_weight(float value, float smoothness)
 {
-    return saturate((value - (threshold - smoothness)) / (smoothness * 2.0f));
+    return saturate((value + smoothness) / (smoothness * 2.0f));
 }
 
 float3 combine_specular_sources(float4 specular_ssr, float3 specular_gi, float3 specular_sky)
 {
-    const float threshold  = 0.01f;
-    const float smoothness = 0.2f; // aka blend region size
+    const float smoothness = 1.0f; // aka blend region size
     
     // get weights for each source
-    float ssr_weight = get_blend_weight(specular_ssr.a, threshold, smoothness);
-    float gi_weight  = get_blend_weight(luminance(specular_gi), threshold, smoothness);
+    float ssr_alpha  = saturate(specular_ssr.a / 0.3f); // it's not exactly an alpha
+    float ssr_weight = get_blend_weight(ssr_alpha, smoothness);
+    float gi_weight  = get_blend_weight(luminance(specular_gi), smoothness);
 
     // blend
     float3 result = specular_sky;                               // start with sky as base
@@ -93,9 +93,9 @@ void main_cs(uint3 thread_id : SV_DispatchThreadID)
     float mip_level                    = lerp(0, mip_count_environment - 1, surface.roughness);
     float3 specular_skysphere          = sample_environment(direction_sphere_uv(dominant_specular_direction), mip_level, mip_count_environment);
     float3 diffuse_skysphere           = sample_environment(direction_sphere_uv(surface.normal), mip_count_environment, mip_count_environment);
-    float4 specular_ssr                = tex_ssr[thread_id.xy].rgba * (float)surface.is_opaque();                     // only compute for opaques
-    float3 diffuse_gi                  = tex_light_diffuse_gi[thread_id.xy].rgb  * 1.0f * (float)surface.is_opaque(); // only computed for opaques
-    float3 specular_gi                 = tex_light_specular_gi[thread_id.xy].rgb * 1.0f * (float)surface.is_opaque(); // only computed for opaques
+    float4 specular_ssr                = tex_ssr[thread_id.xy].rgba * (float)surface.is_opaque(); // only compute for opaques
+    float3 diffuse_gi                  = tex_light_diffuse_gi[thread_id.xy].rgb  * 3.0f;          // only computed for opaques but also used for transparents
+    float3 specular_gi                 = tex_light_specular_gi[thread_id.xy].rgb * 3.0f;          // only computed for opaques but also used for transparents
     float shadow_mask                  = tex[thread_id.xy].r;
 
     // combine the diffuse light

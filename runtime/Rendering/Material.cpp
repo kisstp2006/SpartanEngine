@@ -46,14 +46,12 @@ namespace spartan
             switch (material_property)
             {
                 case MaterialProperty::Optimized:            return "optimized";
-                case MaterialProperty::WorldSpaceHeight:     return "world_space_height";
+                case MaterialProperty::LocalHeight:     return "world_space_height";
                 case MaterialProperty::Clearcoat:            return "clearcoat";
                 case MaterialProperty::Clearcoat_Roughness:  return "clearcoat_roughness";
                 case MaterialProperty::Anisotropic:          return "anisotropic";
                 case MaterialProperty::AnisotropicRotation:  return "anisotropic_rotation";
                 case MaterialProperty::Sheen:                return "sheen";
-                case MaterialProperty::SheenTint:            return "sheen_tint";
-                case MaterialProperty::ColorTint:            return "color_tint";
                 case MaterialProperty::ColorR:               return "color_r";
                 case MaterialProperty::ColorG:               return "color_g";
                 case MaterialProperty::ColorB:               return "color_b";
@@ -138,7 +136,7 @@ namespace spartan
         SetProperty(MaterialProperty::Roughness,        1.0f);
         SetProperty(MaterialProperty::TextureTilingX,   1.0f);
         SetProperty(MaterialProperty::TextureTilingY,   1.0f);
-        SetProperty(MaterialProperty::WorldSpaceHeight, 1.0f);
+        SetProperty(MaterialProperty::LocalHeight, 1.0f);
         SetProperty(MaterialProperty::Ior,              Material::EnumToIor(MaterialIor::Air));
     }
 

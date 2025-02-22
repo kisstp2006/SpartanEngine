@@ -19,7 +19,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-//= INCLUDES ==============================
+//= INCLUDES ============================
 #include "Properties.h"
 #include "Window.h"
 #include "../ImGui/ImGui_Extension.h"
@@ -33,11 +33,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "World/Components/Constraint.h"
 #include "World/Components/Light.h"
 #include "World/Components/AudioSource.h"
-#include "World/Components/AudioListener.h"
 #include "World/Components/Terrain.h"
 #include "World/Components/Camera.h"
-#include "Rendering/Mesh.h"
-//=========================================
+//=======================================
 
 //= NAMESPACES =========
 using namespace std;
@@ -167,7 +165,6 @@ void Properties::OnTickVisible()
                 ShowCamera(entity_ptr->GetComponent<Camera>());
                 ShowTerrain(entity_ptr->GetComponent<Terrain>());
                 ShowAudioSource(entity_ptr->GetComponent<AudioSource>());
-                ShowAudioListener(entity_ptr->GetComponent<AudioListener>());
                 ShowRenderable(renderable);
                 ShowMaterial(material);
                 ShowPhysicsBody(entity_ptr->GetComponent<PhysicsBody>());
@@ -771,12 +768,12 @@ void Properties::ShowMaterial(Material* material) const
                 // modifier/multiplier
                 if (show_modifier)
                 {
-                    if (mat_property == MaterialProperty::ColorTint)
+                    if (mat_property == MaterialProperty::ColorA)
                     {
                         m_material_color_picker->Update();
                     }
                     else
-                    {
+                    { 
                         float value = material->GetProperty(mat_property);
 
                         if (mat_property != MaterialProperty::Metalness)
@@ -808,7 +805,7 @@ void Properties::ShowMaterial(Material* material) const
             };
         
             // properties with textures
-            show_property("Color",                "Surface color",                                                                     MaterialTextureType::Color,     MaterialProperty::ColorTint);
+            show_property("Color",                "Surface color",                                                                     MaterialTextureType::Color,     MaterialProperty::ColorA);
             show_property("Roughness",            "Specifies microfacet roughness of the surface for diffuse and specular reflection", MaterialTextureType::Roughness, MaterialProperty::Roughness);
             show_property("Metalness",            "Blends between a non-metallic and metallic material model",                         MaterialTextureType::Metalness, MaterialProperty::Metalness);
             show_property("Normal",               "Controls the normals of the base layers",                                           MaterialTextureType::Normal,    MaterialProperty::Normal);
@@ -821,7 +818,6 @@ void Properties::ShowMaterial(Material* material) const
             show_property("Anisotropic",          "Amount of anisotropy for specular reflection",                                      MaterialTextureType::Max,       MaterialProperty::Anisotropic);
             show_property("Anisotropic rotation", "Rotates the direction of anisotropy, with 1.0 going full circle",                   MaterialTextureType::Max,       MaterialProperty::AnisotropicRotation);
             show_property("Sheen",                "Amount of soft velvet like reflection near edges",                                  MaterialTextureType::Max,       MaterialProperty::Sheen);
-            show_property("Sheen tint",           "Mix between white and using base color for sheen reflection",                       MaterialTextureType::Max,       MaterialProperty::SheenTint);
             show_property("Subsurface scattering","Amount of translucency",                                                            MaterialTextureType::Max,       MaterialProperty::SubsurfaceScattering);
         }
         
@@ -1025,9 +1021,10 @@ void Properties::ShowTerrain(shared_ptr<Terrain> terrain) const
         // Stats
         ImGui::BeginGroup();
         {
+            ImGui::Text("Area: %.1f km^2",    terrain->GetArea());
             ImGui::Text("Height samples: %d", terrain->GetHeightSampleCount());
             ImGui::Text("Vertices: %d",       terrain->GetVertexCount());
-            ImGui::Text("Indices:  %d ",      terrain->GetIndexCount());
+            ImGui::Text("Indices: %d ",       terrain->GetIndexCount());
         }
         ImGui::EndGroup();
 
@@ -1051,11 +1048,9 @@ void Properties::ShowAudioSource(shared_ptr<AudioSource> audio_source) const
         bool mute              = audio_source->GetMute();
         bool play_on_start     = audio_source->GetPlayOnStart();
         bool loop              = audio_source->GetLoop();
-        bool is_3d             = audio_source->Get3d();
-        int priority           = audio_source->GetPriority();
+        bool is_3d             = audio_source->GetIs3d();
         float volume           = audio_source->GetVolume();
         float pitch            = audio_source->GetPitch();
-        float pan              = audio_source->GetPan();
         //========================================================
 
         // Audio clip
@@ -1067,60 +1062,38 @@ void Properties::ShowAudioSource(shared_ptr<AudioSource> audio_source) const
             audio_source->SetAudioClip(std::get<const char*>(payload->data));
         }
 
-        // Play on start
+        // play on start
         ImGui::Text("Play on Start");
         ImGui::SameLine(column_pos_x); ImGui::Checkbox("##audioSourcePlayOnStart", &play_on_start);
 
-        // Mute
+        // mute
         ImGui::Text("Mute");
         ImGui::SameLine(column_pos_x); ImGui::Checkbox("##audioSourceMute", &mute);
 
-        // Loop
+        // loop
         ImGui::Text("Loop");
         ImGui::SameLine(column_pos_x); ImGui::Checkbox("##audioSourceLoop", &loop);
-
-        // 3D
-        ImGui::Text("3D");
-        ImGui::SameLine(column_pos_x); ImGui::Checkbox("##audioSource3d", &is_3d);
-
-        // Priority
-        ImGui::Text("Priority");
-        ImGui::SameLine(column_pos_x); ImGui::SliderInt("##audioSourcePriority", &priority, 0, 255);
-
-        // Volume
-        ImGui::Text("Volume");
-        ImGui::SameLine(column_pos_x); ImGui::SliderFloat("##audioSourceVolume", &volume, 0.0f, 1.0f);
 
         // Pitch
         ImGui::Text("Pitch");
         ImGui::SameLine(column_pos_x); ImGui::SliderFloat("##audioSourcePitch", &pitch, 0.0f, 3.0f);
 
-        // Pan
-        ImGui::Text("Pan");
-        ImGui::SameLine(column_pos_x); ImGui::SliderFloat("##audioSourcePan", &pan, -1.0f, 1.0f);
+        // loop
+        ImGui::Text("3D");
+        ImGui::SameLine(column_pos_x); ImGui::Checkbox("##audioSourceIs3D", &is_3d);
+
+        // volume
+        ImGui::Text("Volume");
+        ImGui::SameLine(column_pos_x); ImGui::SliderFloat("##audioSourceVolume", &volume, 0.0f, 1.0f);
 
         //= MAP =========================================================================================
         if (mute != audio_source->GetMute())                 audio_source->SetMute(mute);
         if (play_on_start != audio_source->GetPlayOnStart()) audio_source->SetPlayOnStart(play_on_start);
         if (loop != audio_source->GetLoop())                 audio_source->SetLoop(loop);
-        if (is_3d != audio_source->Get3d())                  audio_source->Set3d(is_3d);
-        if (priority != audio_source->GetPriority())         audio_source->SetPriority(priority);
+        if (is_3d != audio_source->GetIs3d())                audio_source->SetIs3d(is_3d);
         if (volume != audio_source->GetVolume())             audio_source->SetVolume(volume);
         if (pitch != audio_source->GetPitch())               audio_source->SetPitch(pitch);
-        if (pan != audio_source->GetPan())                   audio_source->SetPan(pan);
         //===============================================================================================
-    }
-    component_end();
-}
-
-void Properties::ShowAudioListener(shared_ptr<AudioListener> audio_listener) const
-{
-    if (!audio_listener)
-        return;
-
-    if (component_begin("Audio Listener", IconType::Component_AudioListener, audio_listener))
-    {
-
     }
     component_end();
 }
@@ -1194,10 +1167,6 @@ void Properties::ComponentContextMenu_Add() const
                 if (ImGui::MenuItem("Audio Source"))
                 {
                     entity->AddComponent<AudioSource>();
-                }
-                else if (ImGui::MenuItem("Audio Listener"))
-                {
-                    entity->AddComponent<AudioListener>();
                 }
 
                 ImGui::EndMenu();

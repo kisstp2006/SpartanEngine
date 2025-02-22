@@ -29,7 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../RHI_Queue.h"
 #include "../Display/Display.h"
 SP_WARNINGS_OFF
-#include <SDL_vulkan.h>
+#include <SDL3/SDL_vulkan.h>
 SP_WARNINGS_ON
 //================================
 
@@ -215,10 +215,10 @@ namespace spartan
         SP_ASSERT(m_sdl_window != nullptr);
 
         // create surface
-        VkSurfaceKHR surface = nullptr;
+        VkSurfaceKHR surface = VK_NULL_HANDLE;
         {
             SP_ASSERT_MSG(
-                SDL_Vulkan_CreateSurface(static_cast<SDL_Window*>(m_sdl_window), RHI_Context::instance, &surface),
+                SDL_Vulkan_CreateSurface(static_cast<SDL_Window*>(m_sdl_window), RHI_Context::instance, nullptr, &surface),
                 "Failed to created window surface");
 
             VkBool32 present_support = false;
@@ -244,7 +244,7 @@ namespace spartan
         m_height = clamp(m_height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
 
         // swap chain
-        VkSwapchainKHR swap_chain;
+        VkSwapchainKHR swap_chain = VK_NULL_HANDLE;
         {
             VkSwapchainCreateInfoKHR create_info  = {};
             create_info.sType                     = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -342,63 +342,48 @@ namespace spartan
 
         for (uint32_t i = 0; i < m_buffer_count; i++)
         {
-            string name                   = (string("swapchain_image_acquired_") + to_string(i));
-            m_image_acquired_semaphore[i] = make_shared<RHI_SyncPrimitive>(RHI_SyncPrimitive_Type::Semaphore, name.c_str());
-            m_image_acquired_fence[i]     = make_shared<RHI_SyncPrimitive>(RHI_SyncPrimitive_Type::Fence, name.c_str());
+            m_image_acquired_semaphore[i] = make_shared<RHI_SyncPrimitive>(RHI_SyncPrimitive_Type::Semaphore, ("swapchain_" + to_string(i)).c_str());
         }
     }
 
     void RHI_SwapChain::Destroy()
     {
-        for (void* image_view : m_rhi_rtv)
+        // there sdl/os asynchrony compared to the engine, so we need to flush here
+        // to ensure that resources are not used (especially the semaphores)
+        RHI_Device::QueueWaitAll();
+
+        for (void*& image_view : m_rhi_rtv)
         {
             if (image_view)
             {
                 RHI_Device::DeletionQueueAdd(RHI_Resource_Type::TextureView, image_view);
+                image_view = nullptr;
             }
         }
 
-        m_rhi_rtv.fill(nullptr);
-
-        for (auto& semaphore : m_image_acquired_semaphore)
-        {
-            if (semaphore)
-            { 
-                semaphore = unique_ptr<RHI_SyncPrimitive>(nullptr);
-            }
-        }
-
-        RHI_Device::QueueWaitAll();
+        m_image_acquired_semaphore.fill(nullptr);
 
         vkDestroySwapchainKHR(RHI_Context::device, static_cast<VkSwapchainKHR>(m_rhi_swapchain), nullptr);
         m_rhi_swapchain = nullptr;
 
         vkDestroySurfaceKHR(RHI_Context::instance, static_cast<VkSurfaceKHR>(m_rhi_surface), nullptr);
         m_rhi_surface = nullptr;
+
+        // reset indices
+        m_image_index  = 0;
+        m_buffer_index = 0;
     }
 
-    void RHI_SwapChain::Resize(const uint32_t width, const uint32_t height, const bool force /*= false*/)
+    void RHI_SwapChain::Resize(const uint32_t width, const uint32_t height)
     {
         SP_ASSERT(RHI_Device::IsValidResolution(width, height));
-
-        // only resize if needed
-        if (!force)
-        {
-            if (m_width == width && m_height == height)
-                return;
-        }
 
         // save new dimensions
         m_width  = width;
         m_height = height;
 
-        // reset indices
-        m_image_index = numeric_limits<uint32_t>::max();
-        m_buffer_index  = numeric_limits<uint32_t>::max();
-
         Destroy();
         Create();
-        AcquireNextImage();
 
         SP_LOG_INFO("Resolution has been set to %dx%d", width, height);
     }
@@ -410,26 +395,39 @@ namespace spartan
 
     void RHI_SwapChain::AcquireNextImage()
     {
-        // when we run out of buffers, wait
-        if (m_buffer_index != numeric_limits<uint32_t>::max())
-        {
-            m_image_acquired_fence[m_buffer_index]->Wait();
-            m_image_acquired_fence[m_buffer_index]->Reset();
-        }
-
-        // get sync objects
+        // get next semaphore
         m_buffer_index                      = (m_buffer_index + 1) % m_buffer_count;
         RHI_SyncPrimitive* signal_semaphore = m_image_acquired_semaphore[m_buffer_index].get();
-        RHI_SyncPrimitive* signal_fence     = m_image_acquired_fence[m_buffer_index].get();
 
-        SP_ASSERT_VK(vkAcquireNextImageKHR(
-            RHI_Context::device,                                          // device
-            static_cast<VkSwapchainKHR>(m_rhi_swapchain),                 // swapchain
-            numeric_limits<uint64_t>::max(),                              // timeout - wait/block
-            static_cast<VkSemaphore>(signal_semaphore->GetRhiResource()), // signal semaphore
-            static_cast<VkFence>(signal_fence->GetRhiResource()),         // signal fence
-            &m_image_index                                                // pImageIndex
-        ));
+        // VK_NOT_READY can happen if the swapchain is not ready yet, possible during window events
+        // it can happen often on some GPUs/drivers and less and on others, regardless, it has to be handled
+        uint32_t retry_count     = 0;
+        const uint32_t retry_max = 10;
+        while (retry_count < retry_max)
+        {
+            VkResult result = vkAcquireNextImageKHR(
+                RHI_Context::device,
+                static_cast<VkSwapchainKHR>(m_rhi_swapchain),
+                numeric_limits<uint64_t>::max(),
+                static_cast<VkSemaphore>(signal_semaphore->GetRhiResource()),
+                nullptr,
+                &m_image_index
+            );
+    
+            if (result == VK_SUCCESS)
+            {
+                return;
+            }
+            else if (result == VK_NOT_READY)
+            {
+                this_thread::sleep_for(std::chrono::milliseconds(1));
+                retry_count++;
+            }
+            else
+            {
+                SP_ASSERT_VK(result);
+            }
+        }
     }
 
     void RHI_SwapChain::Present()
@@ -444,9 +442,11 @@ namespace spartan
         bool presents_to_this_swapchain = cmd_list->GetSwapchainId() == m_object_id;
         if (presents_to_this_swapchain)
         {
-            RHI_SyncPrimitive* semaphore = cmd_list->GetRenderingCompleteSemaphore();
+            RHI_SyncPrimitive* semaphore   = cmd_list->GetRenderingCompleteSemaphore();
+            semaphore->has_been_waited_for = true;
             m_wait_semaphores.emplace_back(semaphore);
         }
+        SP_ASSERT_MSG(m_wait_semaphores[0] != nullptr, "There is nothing to present");
 
         // get semaphore from vkAcquireNextImageKHR
         RHI_SyncPrimitive* image_acquired_semaphore = m_image_acquired_semaphore[m_buffer_index].get();
@@ -483,18 +483,20 @@ namespace spartan
         if (new_format != m_format)
         {
             m_format = new_format;
-            Resize(m_width, m_height, true);
+            Destroy();
+            Create();
         }
     }
 
     void RHI_SwapChain::SetVsync(const bool enabled)
     {
-        // for v-sync, we could Mailbox for lower latency, but Fifo is always supported, so we'll assume that
+        // for v-sync, we could Mailbox for lower latency, but fifo is always supported, so we'll assume that
 
         if ((m_present_mode == RHI_Present_Mode::Fifo) != enabled)
         {
             m_present_mode = enabled ? RHI_Present_Mode::Fifo : RHI_Present_Mode::Immediate;
-            Resize(m_width, m_height, true);
+            Destroy();
+            Create();
             Timer::OnVsyncToggled(enabled);
             SP_LOG_INFO("VSync has been %s", enabled ? "enabled" : "disabled");
         }
@@ -502,7 +504,7 @@ namespace spartan
 
     bool RHI_SwapChain::GetVsync()
     {
-        // for v-sync, we could Mailbox for lower latency, but Fifo is always supported, so we'll assume that
+        // for v-sync, we could Mailbox for lower latency, but fifo is always supported, so we'll assume that
         return m_present_mode == RHI_Present_Mode::Fifo;
     }
 

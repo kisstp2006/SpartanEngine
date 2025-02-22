@@ -19,11 +19,13 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-//= INCLUDES ========
+//= INCLUDES =============
 #include "pch.h"
 #include "httplib.h"
-#include <SDL_misc.h>
-//===================
+SP_WARNINGS_OFF
+#include <SDL3/SDL_misc.h> // required for SDL_OpenURLWithApp
+SP_WARNINGS_ON
+//========================
 
 //= NAMESPACES =====
 using namespace std;
@@ -153,7 +155,7 @@ namespace spartan
 
         string compute_sha256(const string& input)
         {
-        #ifdef _MSC_VER
+        #ifdef _WIN32
             #pragma comment(lib, "bcrypt.lib")
 
             BCRYPT_ALG_HANDLE hAlg = NULL;

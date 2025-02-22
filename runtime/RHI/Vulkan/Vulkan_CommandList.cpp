@@ -526,11 +526,10 @@ namespace spartan
         RenderPassEnd();
         SP_ASSERT_VK(vkEndCommandBuffer(static_cast<VkCommandBuffer>(m_rhi_resource)));
 
-        // when minimized, or when entering/exiting fullscreen mode, the swapchain
-        // won't present, and won't wait for this semaphore, so we need to reset it
-        if (m_rendering_complete_semaphore->IsSignaled())
+        if (!m_rendering_complete_semaphore->has_been_waited_for)
         {
-            m_rendering_complete_semaphore = make_shared<RHI_SyncPrimitive>(RHI_SyncPrimitive_Type::Semaphore, m_rendering_complete_semaphore_timeline->GetObjectName().c_str());
+            m_rendering_complete_semaphore          = make_shared<RHI_SyncPrimitive>(RHI_SyncPrimitive_Type::Semaphore,         m_rendering_complete_semaphore->GetObjectName().c_str());
+            m_rendering_complete_semaphore_timeline = make_shared<RHI_SyncPrimitive>(RHI_SyncPrimitive_Type::SemaphoreTimeline, m_rendering_complete_semaphore_timeline->GetObjectName().c_str());
         }
 
         queue->Submit(
@@ -539,6 +538,8 @@ namespace spartan
             m_rendering_complete_semaphore.get(),         // signal semaphore
             m_rendering_complete_semaphore_timeline.get() // signal semaphore
         );
+
+        m_rendering_complete_semaphore->has_been_waited_for = false;
 
         m_swapchain_id = swapchain_id;
         m_state        = RHI_CommandListState::Submitted;
@@ -1563,17 +1564,12 @@ namespace spartan
         m_timeblock_active = nullptr;
     }
 
-    void RHI_CommandList::UpdateBuffer(RHI_Buffer* buffer, const uint64_t offset, const uint64_t size, const void* data, const bool zero_out)
+    void RHI_CommandList::UpdateBuffer(RHI_Buffer* buffer, const uint64_t offset, const uint64_t size, const void* data)
     {
         SP_ASSERT(buffer);
         SP_ASSERT(size);
         SP_ASSERT(data);
         SP_ASSERT(offset + size <= buffer->GetObjectSize());
-
-        if (zero_out)
-        { 
-            memset(buffer->GetMappedData(), 0, buffer->GetObjectSize());
-        }
 
         // check for vkCmdUpdateBuffer compliance
         bool synchronized_update  = true;
@@ -1738,12 +1734,12 @@ namespace spartan
             dependency_info.sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR;
             dependency_info.imageMemoryBarrierCount = static_cast<uint32_t>(m_image_barriers.size());
             dependency_info.pImageMemoryBarriers    = vk_barriers.data();
-            m_image_barriers.clear();
 
             RenderPassEnd();
             vkCmdPipelineBarrier2(static_cast<VkCommandBuffer>(m_rhi_resource), &dependency_info);
 
             Profiler::m_rhi_pipeline_barriers++;
+            m_image_barriers.clear();
         }
     }
 

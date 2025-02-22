@@ -60,7 +60,7 @@ namespace spartan
         math::Vector3 camera_position;
         float camera_near;
 
-        math::Vector3 camera_direction;
+        math::Vector3 camera_forward;
         float camera_far;
 
         float camera_last_movement_time;
@@ -77,13 +77,13 @@ namespace spartan
         math::Vector3 wind;
         float gamma;
 
+        math::Vector3 camera_right;
+        float padding2;
+
         void set_bit(const bool set, const uint32_t bit)
         {
             options = set ? (options |= bit) : (options & ~bit);
         }
-
-        bool operator==(const Cb_Frame& rhs) const { return memcmp(this, &rhs, sizeof(Cb_Frame)) == 0; }
-        bool operator!=(const Cb_Frame& rhs) const { return !(*this == rhs); }
     };
 
     // 128 byte push constant buffer - updates per pass/draw
@@ -152,11 +152,6 @@ namespace spartan
             m_value.m03 = static_cast<float>(material_index);
             m_value.m13 = is_transparent ? 1.0f : 0.0f;
         }
-
-        bool operator==(const Pcb_Pass& rhs) const
-        {
-            return transform == rhs.transform && m_value == rhs.m_value;
-        }
     };
 
     struct Sb_Material
@@ -171,13 +166,14 @@ namespace spartan
         float normal_mul    = 0.0f;
         float height_mul    = 0.0f;
 
-        uint32_t flags           = 0;
-        float world_space_height = 0.0f;
-        float ior                = 1.0f;
+        uint32_t flags    = 0;
+        float local_width = 0.0f;
+        float ior         = 1.0f;
         float subsurface_scattering;
 
         float sheen;
-        math::Vector3 sheen_tint;
+        float local_height = 0.0f;
+        math::Vector2 padding;
 
         float anisotropic;
         float anisotropic_rotation;
@@ -200,7 +196,5 @@ namespace spartan
         float angle;
         uint32_t flags;
         math::Vector2 padding;
-
-        bool operator==(const Sb_Light& rhs) const { return memcmp(this, &rhs, sizeof(Sb_Light)) == 0; }
     };
 }

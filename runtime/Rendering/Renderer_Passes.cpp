@@ -30,7 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../RHI/RHI_Buffer.h"
 #include "../RHI/RHI_Shader.h"
 #include "../Rendering/Material.h"
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include "../RHI/RHI_FidelityFX.h"
 #endif
 #include "../RHI/RHI_RasterizerState.h"
@@ -282,18 +282,18 @@ namespace spartan
         {
             uint32_t instance_start_index = 0;
             bool draw_instanced           = pso.instancing && renderable->HasInstancing();
+            Vector3 camera_position       = camera->GetEntity()->GetPosition();
 
             if (draw_instanced)
             {
                 for (uint32_t group_index = 0; group_index < renderable->GetInstancePartitionCount(); group_index++)
                 {
-                    uint32_t group_end_index = renderable->GetBoundingBoxGroupEndIndices()[group_index];
-                    uint32_t instance_count  = group_end_index - instance_start_index;
+                    uint32_t group_end_index              = renderable->GetBoundingBoxGroupEndIndices()[group_index];
+                    uint32_t instance_count               = group_end_index - instance_start_index;
+                    const BoundingBox& bounding_box_group = renderable->GetBoundingBox(BoundingBoxType::TransformedInstanceGroup, group_index);
 
                     // skip instance groups outside of the view frustum
                     {
-                        const BoundingBox& bounding_box_group = renderable->GetBoundingBox(BoundingBoxType::TransformedInstanceGroup, group_index);
-
                         if (light)
                         {
                             if (!light->IsInViewFrustum(renderable, array_index))
@@ -315,13 +315,19 @@ namespace spartan
 
                     if (instance_count > 0)
                     {
-                        cmd_list->DrawIndexed(
-                            renderable->GetIndexCount(),
-                            renderable->GetIndexOffset(),
-                            renderable->GetVertexOffset(),
-                            instance_start_index,
-                            instance_count
-                        );
+                        float distance_squared = Vector3::DistanceSquared(camera_position, bounding_box_group.GetClosestPoint(camera_position));
+                        bool draw              = distance_squared <= renderable->GetMaxRenderDistance() * renderable->GetMaxRenderDistance();
+
+                        if (draw)
+                        { 
+                            cmd_list->DrawIndexed(
+                                renderable->GetIndexCount(),
+                                renderable->GetIndexOffset(),
+                                renderable->GetVertexOffset(),
+                                instance_start_index,
+                                instance_count
+                            );
+                        }
                     }
 
                     instance_start_index = group_end_index;
@@ -329,11 +335,17 @@ namespace spartan
             }
             else 
             {
-                cmd_list->DrawIndexed(
-                    renderable->GetIndexCount(),
-                    renderable->GetIndexOffset(),
-                    renderable->GetVertexOffset()
-                );
+                float distance_squared = visibility::distances_squared[renderable->GetEntity()->GetObjectId()];
+                bool draw              = distance_squared <= renderable->GetMaxRenderDistance() * renderable->GetMaxRenderDistance();
+
+                if (draw)
+                { 
+                    cmd_list->DrawIndexed(
+                        renderable->GetIndexCount(),
+                        renderable->GetIndexOffset(),
+                        renderable->GetVertexOffset()
+                    );
+                }
             }
 
             cmd_list->SetIgnoreClearValues(true);
@@ -415,9 +427,12 @@ namespace spartan
                 Pass_Light(cmd_list_graphics, is_transparent);             // compute diffuse and specular buffers
                 Pass_Light_GlobalIllumination(cmd_list_graphics);          // compute global illumination
                 Pass_Light_Composition(cmd_list_graphics, is_transparent); // compose all light (diffuse, specular, etc.)
-                Pass_Light_ImageBased(cmd_list_graphics, is_transparent);  // apply IBL (skysphere, ssr, global illumination etc.)
 
+                // ssr and gi require the final lighting output right before them, so blit it here for them
+                // simply using the final frame will cause accumulation, which GI doesn't handle well, and SSR can produce artifacts on NV 1080 Ti (big values in the denoiser)
                 cmd_list_graphics->Blit(rt_render, GetRenderTarget(Renderer_RenderTarget::frame_render_pre_post_process), false);
+
+                Pass_Light_ImageBased(cmd_list_graphics, is_transparent);  // apply IBL (skysphere, ssr, global illumination etc.)
             }
 
             // upscale to output resolution
@@ -943,8 +958,6 @@ namespace spartan
         { 
             cmd_list->BeginTimeblock("ssr");
 
-            cmd_list->RenderPassEnd();
-
             RHI_FidelityFX::SSSR_Dispatch(
                 cmd_list,
                 GetOption<float>(Renderer_Option::ResolutionScale),
@@ -1269,7 +1282,7 @@ namespace spartan
         cmd_list->SetTexture(Renderer_BindingsSrv::light_diffuse,    GetRenderTarget(Renderer_RenderTarget::light_diffuse));
         cmd_list->SetTexture(Renderer_BindingsSrv::light_specular,   GetRenderTarget(Renderer_RenderTarget::light_specular));
         cmd_list->SetTexture(Renderer_BindingsSrv::light_volumetric, GetRenderTarget(Renderer_RenderTarget::light_volumetric));
-        cmd_list->SetTexture(Renderer_BindingsSrv::frame,            tex_refraction);
+        cmd_list->SetTexture(Renderer_BindingsSrv::tex2,             tex_refraction);
         cmd_list->SetTexture(Renderer_BindingsSrv::ssao,             GetRenderTarget(Renderer_RenderTarget::ssao));
         cmd_list->SetTexture(Renderer_BindingsSrv::environment,      tex_skysphere);
 
@@ -1299,7 +1312,7 @@ namespace spartan
         cmd_list->SetTexture(Renderer_BindingsSrv::light_diffuse_gi,  GetRenderTarget(Renderer_RenderTarget::light_diffuse_gi));
         cmd_list->SetTexture(Renderer_BindingsSrv::light_specular_gi, GetRenderTarget(Renderer_RenderTarget::light_specular_gi));
         cmd_list->SetTexture(Renderer_BindingsSrv::ssao,              GetRenderTarget(Renderer_RenderTarget::ssao));
-        cmd_list->SetTexture(Renderer_BindingsSrv::ssr,               GetRenderTarget(Renderer_RenderTarget::ssr));
+        cmd_list->SetTexture(Renderer_BindingsSrv::tex2,              GetRenderTarget(Renderer_RenderTarget::ssr));
         cmd_list->SetTexture(Renderer_BindingsUav::tex_sss,           GetRenderTarget(Renderer_RenderTarget::sss));
         cmd_list->SetTexture(Renderer_BindingsSrv::lutIbl,            GetRenderTarget(Renderer_RenderTarget::brdf_specular_lut));
         cmd_list->SetTexture(Renderer_BindingsSrv::environment,       GetRenderTarget(Renderer_RenderTarget::skysphere));
@@ -1370,40 +1383,40 @@ namespace spartan
             return;
 
         cmd_list->BeginTimeblock("light_integration_environment_filter");
+        {
+            uint32_t mip_count = tex_environment->GetMipCount();
+            uint32_t mip_level = mip_count - m_environment_mips_to_filter_count;
+            SP_ASSERT(mip_level != 0);
 
-        uint32_t mip_count = tex_environment->GetMipCount();
-        uint32_t mip_level = mip_count - m_environment_mips_to_filter_count;
-        SP_ASSERT(mip_level != 0);
+            // generate mips as light_integration.hlsl expects them
+            if (mip_level == 0)
+            { 
+                Pass_Downscale(cmd_list, tex_environment, Renderer_DownsampleFilter::Average);
+            }
 
-        // generate mips as light_integration.hlsl expects them
-        if (mip_level == 0)
-        { 
-            Pass_Downscale(cmd_list, tex_environment, Renderer_DownsampleFilter::Average);
+            // set pipeline state
+            static RHI_PipelineState pso;
+            pso.name             = "light_integration_environment_filter";
+            pso.shaders[Compute] = shader_c;
+            cmd_list->SetPipelineState(pso);
+
+            cmd_list->SetTexture(Renderer_BindingsSrv::environment, tex_environment);
+            cmd_list->SetTexture(Renderer_BindingsUav::tex, tex_environment, mip_level, 1);
+
+            // set pass constants
+            m_pcb_pass_cpu.set_f3_value(static_cast<float>(mip_level), static_cast<float>(mip_count), 0.0f);
+            cmd_list->PushConstants(m_pcb_pass_cpu);
+
+            const uint32_t thread_group_count = 8;
+            const uint32_t resolution_x       = tex_environment->GetWidth()  >> mip_level;
+            const uint32_t resolution_y       = tex_environment->GetHeight() >> mip_level;
+            cmd_list->Dispatch(
+                static_cast<uint32_t>(ceil(static_cast<float>(resolution_y) / thread_group_count)),
+                static_cast<uint32_t>(ceil(static_cast<float>(resolution_y) / thread_group_count))
+            );
+
+            m_environment_mips_to_filter_count--;
         }
-
-        // set pipeline state
-        static RHI_PipelineState pso;
-        pso.name             = "light_integration_environment_filter";
-        pso.shaders[Compute] = shader_c;
-        cmd_list->SetPipelineState(pso);
-
-        cmd_list->SetTexture(Renderer_BindingsSrv::environment, tex_environment);
-        cmd_list->SetTexture(Renderer_BindingsUav::tex, tex_environment, mip_level, 1);
-
-        // set pass constants
-        m_pcb_pass_cpu.set_f3_value(static_cast<float>(mip_level), static_cast<float>(mip_count), 0.0f);
-        cmd_list->PushConstants(m_pcb_pass_cpu);
-
-        const uint32_t thread_group_count = 8;
-        const uint32_t resolution_x       = tex_environment->GetWidth()  >> mip_level;
-        const uint32_t resolution_y       = tex_environment->GetHeight() >> mip_level;
-        cmd_list->Dispatch(
-            static_cast<uint32_t>(ceil(static_cast<float>(resolution_y) / thread_group_count)),
-            static_cast<uint32_t>(ceil(static_cast<float>(resolution_y) / thread_group_count))
-        );
-
-        m_environment_mips_to_filter_count--;
-
         cmd_list->EndTimeblock();
     }
 
@@ -1597,7 +1610,7 @@ namespace spartan
         cmd_list->SetPipelineState(pso);
 
         // set pass constants
-        m_pcb_pass_cpu.set_f3_value(0.0f, GetOption<float>(Renderer_Option::Tonemapping), GetOption<float>(Renderer_Option::Exposure));
+        m_pcb_pass_cpu.set_f3_value(GetOption<float>(Renderer_Option::Tonemapping));
         cmd_list->PushConstants(m_pcb_pass_cpu);
 
         // set textures
@@ -1773,7 +1786,7 @@ namespace spartan
                 GetCamera().get(),
                 m_cb_frame_cpu.delta_time,
                 GetOption<float>(Renderer_Option::Sharpness),
-                GetOption<float>(Renderer_Option::Exposure),
+                1.0f,
                 GetOption<float>(Renderer_Option::ResolutionScale),
                 tex_in,
                 GetRenderTarget(Renderer_RenderTarget::gbuffer_depth),
@@ -2268,7 +2281,7 @@ namespace spartan
         {
             m_pcb_pass_cpu.set_f4_value(font->GetColorOutline());
             cmd_list->PushConstants(m_pcb_pass_cpu);
-            cmd_list->SetTexture(Renderer_BindingsSrv::font_atlas, font->GetAtlasOutline().get());
+            cmd_list->SetTexture(Renderer_BindingsSrv::tex, font->GetAtlasOutline().get());
             cmd_list->DrawIndexed(font->GetIndexCount());
         }
 
@@ -2276,7 +2289,7 @@ namespace spartan
         {
             m_pcb_pass_cpu.set_f4_value(font->GetColor());
             cmd_list->PushConstants(m_pcb_pass_cpu);
-            cmd_list->SetTexture(Renderer_BindingsSrv::font_atlas, font->GetAtlas().get());
+            cmd_list->SetTexture(Renderer_BindingsSrv::tex, font->GetAtlas().get());
             cmd_list->DrawIndexed(font->GetIndexCount());
         }
 

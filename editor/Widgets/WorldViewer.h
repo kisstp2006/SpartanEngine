@@ -21,11 +21,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #pragma once
 
-//= INCLUDES ==============================
+//= INCLUDES ======
 #include "Widget.h"
 #include <memory>
-#include "../ImGui/Source/imgui_internal.h"
-//=========================================
+//=================
 
 namespace spartan { class Entity; }
 
@@ -38,7 +37,7 @@ public:
     void SetSelectedEntity(const std::shared_ptr<spartan::Entity> entity);
 
 private:
-    // Tree
+    // tree
     void TreeShow();
     void OnTreeBegin();
     void OnTreeEnd();
@@ -46,13 +45,13 @@ private:
     void HandleClicking();
     void EntityHandleDragDrop(std::shared_ptr<spartan::Entity> entity_ptr) const;
 
-    // Misc
+    // misc
     void Popups();
     void PopupContextMenu() const;
     void PopupEntityRename() const;
     void HandleKeyShortcuts();
 
-    // Context menu actions
+    // context menu actions
     static void ActionEntityDelete(const std::shared_ptr<spartan::Entity> entity);
     static spartan::Entity* ActionEntityCreateEmpty();
     static void ActionEntityCreateCube();
@@ -68,10 +67,8 @@ private:
     static void ActionEntityCreatePhysicsBody();
     static void ActionEntityCreateConstraint();
     static void ActionEntityCreateAudioSource();
-    static void ActionEntityCreateAudioListener();
 
     std::shared_ptr<spartan::Entity> m_entity_empty;
-    bool m_expand_to_selection      = false;
-    bool m_expanded_to_selection    = false;
-    ImRect m_selected_entity_rect;
+    bool m_expand_to_selection   = false;
+    bool m_expanded_to_selection = false;
 };

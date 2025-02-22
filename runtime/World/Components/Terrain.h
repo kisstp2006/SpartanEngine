@@ -39,7 +39,6 @@ namespace spartan
     enum class TerrainProp
     {
         Tree,
-        Plant,
         Grass
     };
 
@@ -57,11 +56,16 @@ namespace spartan
         RHI_Texture* GetHeightMap() const          { return m_height_texture; }
         void SetHeightMap(RHI_Texture* height_map) { m_height_texture = height_map;}
 
+        uint32_t GetWidth() const;
+        uint32_t GetHeight() const;
+
         float GetMinY() const     { return m_min_y; }
         void SetMinY(float min_z) { m_min_y = min_z; }
 
         float GetMaxY() const     { return m_max_y; }
         void SetMaxY(float max_z) { m_max_y = max_z; }
+
+        float GetArea() const     { return m_area_km2; }
 
         void Generate();
         void GenerateTransforms(std::vector<math::Matrix>* transforms, const uint32_t count, const TerrainProp terrain_prop);
@@ -76,9 +80,9 @@ namespace spartan
         void UpdateMesh(const uint32_t tile_index);
         void Clear();
 
-        float m_min_y                     = -5.0f; // everything below 0.0 is assumed to be below sea level
-        float m_max_y                     = 50.0f;
-        float m_vertex_density            = 1.0f;
+        float m_min_y                     = -30.0f; // sea level is 0.0
+        float m_max_y                     = 120.0f;
+        float m_area_km2                  = 0.0f;
         std::atomic<bool> m_is_generating = false;
         uint32_t m_height_samples         = 0;
         uint32_t m_vertex_count           = 0;

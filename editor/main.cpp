@@ -23,10 +23,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <vector>
 #include <string>
 
-#ifdef _MSC_VER // windows
+#ifdef _WIN32 // windows
 #include <Windows.h>
 #include <shellapi.h>
-
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
     // convert command line to argv-like format
@@ -49,5 +48,6 @@ int main(int argc, char** argv)
 #endif
     Editor editor = Editor(args);
     editor.Tick();
+
     return 0;
 }

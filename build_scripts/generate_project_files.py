@@ -36,8 +36,6 @@ paths = {
     },
     "third_party_libs": {
         "dx": Path("third_party") / "libraries" / "dxcompiler.dll",
-        "fmod": Path("third_party") / "libraries" / "fmod.dll",
-        "fmod_debug": Path("third_party") / "libraries" / "fmodL.dll",
     },
     "assets": {
         "models": Path("assets") / "models",
@@ -86,8 +84,8 @@ def main():
     file_utilities.copy(Path("build_scripts") / "7z.dll", "binaries")
 
     print("\n2. Download and extract libraries...")
-    library_url           = 'https://www.dropbox.com/scl/fi/e9b8eiyvs69zoyarleift/libraries.7z?rlkey=5a3me7rc3os4naev2dyifjbsz&st=1amejgmw&dl=1'
-    library_expected_hash = '89f3dc352d1ff47b059ef1bceed2d89f5ae7989eac60666624f195363a23d85d'
+    library_url           = 'https://www.dropbox.com/scl/fi/mxox9g0j1rb3re0arpu0x/libraries.7z?rlkey=nhfpr02mhuxwf151p9ka495fc&st=19h4l57p&dl=1'
+    library_expected_hash = 'ec483b7875ab97afe7d70b95a2ed5ecdeae78e275cefabd9305b4d0b2428a389'
     library_destination   = Path("third_party") / "libraries" / "libraries.7z"
     file_utilities.download_file(library_url, str(library_destination), library_expected_hash)
     file_utilities.extract_archive(str(library_destination), str(Path("third_party") / "libraries"))

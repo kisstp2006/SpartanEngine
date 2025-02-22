@@ -52,7 +52,7 @@ struct FrameBufferData
     float3 camera_position;
     float camera_near;
     
-    float3 camera_direction;
+    float3 camera_forward;
     float camera_far;
 
     float camera_last_movement_time;
@@ -68,6 +68,9 @@ struct FrameBufferData
 
     float3 wind;
     float gamma;
+
+    float3 camera_right;
+    float padding2;
 };
 
 // 128 byte push constant buffer used by every pass
@@ -91,12 +94,13 @@ struct MaterialParameters
     float height;
 
     uint flags;
-    float world_space_height;
+    float local_width;
     float ior;
     float subsurface_scattering;
     
     float  sheen;
-    float3 sheen_tint;
+    float local_height;
+    float2 padding;
     
     float anisotropic;
     float anisotropic_rotation;
@@ -148,16 +152,13 @@ Texture2DArray tex_light_color : register(t14);
 Texture2D tex_lut_ibl     : register(t15);
 Texture2D tex_environment : register(t16);
 Texture2D tex_ssao        : register(t17);
-Texture2D tex_ssr         : register(t18);
-Texture2D tex_frame       : register(t19);
-Texture2D tex             : register(t20);
-Texture2D tex2            : register(t21);
-Texture2D tex_font_atlas  : register(t22);
+Texture2D tex             : register(t18);
+Texture2D tex2            : register(t19);
 
 // bindless arrays
-Texture2D material_textures[]                            : register(t23, space1);
-StructuredBuffer<MaterialParameters> material_parameters : register(t24, space2);
-StructuredBuffer<LightParameters> light_parameters       : register(t25, space3);
+Texture2D material_textures[]                            : register(t20, space1);
+StructuredBuffer<MaterialParameters> material_parameters : register(t21, space2);
+StructuredBuffer<LightParameters> light_parameters       : register(t22, space3);
 SamplerComparisonState samplers_comparison[]             : register(s0,  space4);
 SamplerState samplers[]                                  : register(s1,  space5);
 

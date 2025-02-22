@@ -47,47 +47,85 @@ struct gbuffer_vertex
     float3 normal                 : NORMAL_WORLD;
     float3 tangent                : TANGENT_WORLD;
     float2 uv                     : TEXCOORD;
+    float3 color                  : COLOR_;
     uint instance_id              : INSTANCE_ID;
     matrix transform              : TRANSFORM;
     matrix transform_previous     : TRANSFORM_PREVIOUS;
 };
+
+static float hash(float n)
+{
+    return frac(sin(n) * 43758.5453f);
+}
+
+float hash_uint(uint seed)
+{
+    seed ^= seed >> 17;
+    seed *= 0x5bd1e995u;
+    seed ^= seed >> 13;
+    return float(seed) / float(0xffffffffu);
+}
+
+static float perlin_noise(float x)
+{
+    float i = floor(x);
+    float f = frac(x);
+    f = f * f * (3.0 - 2.0 * f);
+
+    return lerp(hash(i), hash(i + 1.0), f);
+}
+
+// remap a value from one range to another
+float remap(float value, float inMin, float inMax, float outMin, float outMax)
+{
+    return outMin + (value - inMin) * (outMax - outMin) / (inMax - inMin);
+}
 
 static float3 extract_position(matrix transform)
 {
     return float3(transform._31, transform._32, transform._33);
 }
 
+static float3 rotate_x(float angle, float3 v)
+{
+    float c = cos(angle);
+    float s = sin(angle);
+
+    // standard x-axis rotation
+    return float3(
+        v.x,
+        c * v.y - s * v.z,
+        s * v.y + c * v.z
+    );
+}
+
+static float3 rotate_y(float angle, float3 v)
+{
+    float c = cos(angle);
+    float s = sin(angle);
+
+    // apply standard y-axis rotation
+    return float3(
+        c * v.x + s * v.z,
+        v.y,
+        -s * v.x + c * v.z
+    );
+}
+
 struct vertex_processing
 {
     struct vegetation
     {
-        static float hash(float n)
+        static float3 apply_wind(uint instance_id, float3 position_vertex, float height_percent, float3 wind, float time)
         {
-            return frac(sin(n) * 43758.5453f);
-        }
-
-        static float perlin_noise(float x)
-        {
-            float i = floor(x);
-            float f = frac(x);
-            f = f * f * (3.0 - 2.0 * f);
-
-            return lerp(hash(i), hash(i + 1.0), f);
-        }
-
-        static float3 apply_wind(uint instance_id, float3 position_vertex, float3 animation_pivot, float3 wind, float time)
-        {
-            const float sway_extent       = 0.3f;  // maximum sway amplitude
-            const float sway_speed        = 2.0f;  // sway frequency
-            const float noise_scale       = 0.1f;  // scale of low-frequency noise
-            const float flutter_intensity = 0.05f; // intensity of fluttering
+            const float sway_extent       = 0.2f;   // maximum sway amplitude
+            const float sway_speed        = 1.0f;   // sway frequency
+            const float noise_scale       = 0.1f;   // scale of low-frequency noise
+            const float flutter_intensity = 0.025f; // intensity of fluttering
         
             // normalize wind direction and calculate magnitude
             float3 wind_direction = normalize(wind);
             float wind_magnitude  = length(wind);
-        
-            // height-based sway factor (stronger sway at higher points)
-            float sway_factor = saturate((position_vertex.y - animation_pivot.y) / GetMaterial().world_space_height);
         
             // base sinusoidal sway
             float phase_offset = float(instance_id) * 0.25f * PI; // unique phase per instance
@@ -103,7 +141,7 @@ struct vertex_processing
         
             // combine all factors for sway
             float combined_wave = base_wave + flutter;
-            float3 sway_offset  = adjusted_wind_direction * combined_wave * sway_extent * sway_factor * wind_magnitude;
+            float3 sway_offset  = adjusted_wind_direction * combined_wave * sway_extent * height_percent * wind_magnitude;
         
             // apply the calculated sway to the vertex
             position_vertex += sway_offset;
@@ -111,7 +149,7 @@ struct vertex_processing
             return position_vertex;
         }
         
-        static float3 apply_player_bend(float3 position_vertex, float3 animation_pivot)
+        static float3 apply_player_bend(float3 position_vertex, float height_percent)
         {
             // calculate horizontal distance to player
             float distance = length(float2(position_vertex.x - buffer_frame.camera_position.x, position_vertex.z - buffer_frame.camera_position.z));
@@ -122,19 +160,13 @@ struct vertex_processing
             // direction away from player
             float2 direction_away_from_player = normalize(position_vertex.xz - buffer_frame.camera_position.xz);
         
-            // calculate height factor (more bending at the top)
-            float height_factor = (position_vertex.y - animation_pivot.y) / GetMaterial().world_space_height;
-            height_factor = saturate(height_factor);
-        
             // apply rotational bending
-            float3 bending_offset = float3(direction_away_from_player * bending_strength * height_factor, bending_strength * height_factor * 0.5f);
+            float3 bending_offset = float3(direction_away_from_player * bending_strength * height_percent, 
+                                           bending_strength * height_percent * 0.5f);
         
-            // adjust position
+            // adjust position: apply both horizontal and vertical bending
             position_vertex.xz += bending_offset.xz * 0.5f; // horizontal effect
-            float proposed_y_position = position_vertex.y + bending_offset.y * 1.0f; // vertical effect
-        
-            // ensure vegetation doesn't bend below the ground
-            position_vertex.y = max(proposed_y_position, animation_pivot.y);
+            position_vertex.y  += bending_offset.y;         // vertical effect
         
             return position_vertex;
         }
@@ -212,34 +244,104 @@ struct vertex_processing
         }
     };
 
-    static float3 ambient_animation(Surface surface, float3 position_vertex, float4x4 transform, uint instance_id, float3 wind, float time)
+    static void process_local_space(Surface surface, inout Vertex_PosUvNorTan input, inout gbuffer_vertex vertex, float width_percent, float height_percent, uint instance_id)
     {
-        float3 position        = extract_position(transform);
-        float3 animation_pivot = position - float3(0.0f, GetMaterial().world_space_height * 0.5f, 0.0f);
-        
-        if (surface.vertex_animate_wind())
+        if (surface.is_grass_blade())
         {
-            position_vertex = vegetation::apply_wind(instance_id, position_vertex, animation_pivot, wind, time);
-            position_vertex = vegetation::apply_player_bend(position_vertex, animation_pivot);
+            // give it a nice color gradient
+            float3 color_base = float3(0.05f, 0.2f, 0.01f); // darker green
+            float3 color_tip  = float3(0.5f, 0.5f, 0.1f);   // yellowish
+            vertex.color      = lerp(color_base, color_tip, smoothstep(0, 1, height_percent * 0.5f));
+
+            // replace flat normals with curved ones
+            float blade_x_direction     = width_percent < 0.5f ? -1.0f : 1.0f;
+            const float rotation        = 60.0f * DEG_TO_RAD * blade_x_direction;
+            float3 rotated_normal_left  = rotate_y(-rotation, input.normal);
+            float3 rotated_normal_right = rotate_y(rotation, input.normal);
+            input.normal                = normalize(lerp(rotated_normal_left, rotated_normal_right, width_percent));
+
+            // bend due to gravity
+            float random_lean  = hash_uint(instance_id) * 1.0f;
+            float curve_amount = random_lean * height_percent;
+            input.position.xyz = rotate_x(curve_amount,  input.position.xyz);
+
+            // bend due to wind
+            curve_amount       = perlin_noise((float)buffer_frame.time * 1.0f) * 0.2f;
+            input.position.xyz = rotate_x(curve_amount, input.position.xyz);
+        }
+    }
+    
+    static void process_world_space(Surface surface, inout float3 position_world, float3 normal_world, float3 position_local, float4x4 transform, float width_percent, float height_percent, uint instance_id, float time_offset = 0.0f)
+    {
+        float time  = (float)buffer_frame.time + time_offset;
+        float3 wind = buffer_frame.wind;
+
+        if (surface.is_grass_blade())
+        {
+            // the blade is super thin, so thicken it when viewed from the side
+            //float3 view_direction        = get_view_direction(position_world);
+            //float v_dot_n                = abs(dot(normal_world.xz, view_direction.xz));
+            //float thickness_offset       = 1.0f - v_dot_n;
+            //float blade_x_direction      = width_percent < 0.5f ? -1.0f : 1.0f;
+            //float3 offset                = thickness_offset * blade_x_direction * 0.2f;
+            //position_world.x            += offset.x;
+
+            // wind simulation
+            {
+                const float wind_direction_scale      = 0.05f; // scale for large-scale wind direction noise
+                const float wind_direction_time_scale = 0.05f; // time-based animation speed for wind direction
+                const float wind_strength_scale       = 0.25f; // scale for wind strength noise
+                const float wind_strength_time_scale  = 2.0f;  // faster time-based animation for wind strength
+                const float wind_strength_amplitude   = 2.0f;  // amplifies wind strength noise output
+                const float min_wind_lean             = 0.25f; // minimum lean angle for grass blades
+                const float max_wind_lean             = 1.0f;  // maximum lean angle for grass blades
+            
+                float wind_direction       = perlin_noise(dot(position_world.xz, float2(wind_direction_scale, wind_direction_scale)) + wind_direction_time_scale * time);
+                wind_direction             = remap(wind_direction, -1.0f, 1.0f, 0.0f, PI2); // remap to [0, 2π]
+                float wind_strength_noise  = perlin_noise(dot(position_world.xz, float2(wind_strength_scale, wind_strength_scale)) + time * wind_strength_time_scale) * wind_strength_amplitude;
+                float wind_lean_angle      = remap(wind_strength_noise, -1.0f, 1.0f, min_wind_lean, max_wind_lean);
+                wind_lean_angle            = (wind_lean_angle * wind_lean_angle * wind_lean_angle); // cubic ease-in for natural bending
+                float2 wind_offset         = float2(cos(wind_direction), sin(wind_direction)) * wind_lean_angle;
+                position_world.xz         += wind_offset * height_percent;
+            }
+        }
+        
+        if (surface.vertex_animate_wind() && !surface.is_grass_blade())
+        {
+            position_world = vegetation::apply_wind(instance_id, position_world, height_percent, wind, time);
+        }
+
+        if (surface.vertex_animate_wind() || surface.is_grass_blade())
+        {
+            position_world = vegetation::apply_player_bend(position_world, height_percent);
         }
     
         if (surface.vertex_animate_water())
         {
-            position_vertex = water::apply_wave(position_vertex, time);
-            position_vertex = water::apply_ripple(position_vertex, time);
+            position_world = water::apply_wave(position_world, time);
+            position_world = water::apply_ripple(position_world, time);
         }
-    
-        return position_vertex;
     }
 };
 
 gbuffer_vertex transform_to_world_space(Vertex_PosUvNorTan input, uint instance_id, matrix transform)
 {
-    gbuffer_vertex vertex;
-
-    // compute uv
     MaterialParameters material = GetMaterial();
-    vertex.uv                   = float2(input.uv.x * material.tiling.x + material.offset.x, input.uv.y * material.tiling.y + material.offset.y);
+    Surface surface;
+    surface.flags = material.flags;
+
+    // start building the vertex
+    gbuffer_vertex vertex;
+    vertex.uv    = float2(input.uv.x * material.tiling.x + material.offset.x, input.uv.y * material.tiling.y + material.offset.y);
+    vertex.color = 1.0f;
+
+    // compute width and height percent, they represent the position of the vertex relative to the grass blade
+    float3 position_transform = extract_position(transform); // bottom-left of the grass blade
+    float width_percent       = (input.position.xyz.x) / GetMaterial().local_width;
+    float height_percent      = (input.position.xyz.y - position_transform.x) / GetMaterial().local_height;
+
+    // vertex processing - local space
+    vertex_processing::process_local_space(surface, input, vertex, width_percent, height_percent, instance_id);
 
     // compute the final world transform
     bool is_instanced         = instance_id != 0; // not ideal as you can have instancing with instance_id = 0, however it's very performant branching due to predictability
@@ -268,32 +370,10 @@ gbuffer_vertex transform_to_world_space(Vertex_PosUvNorTan input, uint instance_
     vertex.transform          = transform;
     vertex.transform_previous = transform_previous;
 
-    // vertex processing
-    {
-        // get material and surface
-        MaterialParameters material = GetMaterial();
-        Surface surface; surface.flags = material.flags;
-        
-        // apply ambient animation - done here so that it can benefit from potentially tessellated surfaces
-        vertex.position = vertex_processing::ambient_animation(
-            surface,
-            vertex.position,
-            vertex.transform,
-            vertex.instance_id,
-            buffer_frame.wind,
-            (float)buffer_frame.time
-        );
-
-        vertex.position_previous = vertex_processing::ambient_animation(
-            surface,
-            vertex.position_previous,
-            vertex.transform_previous,
-            vertex.instance_id,
-            buffer_frame.wind,
-            (float)buffer_frame.time - buffer_frame.delta_time
-        );
-    }
-
+    // vertex processing - world space
+    vertex_processing::process_world_space(surface, vertex.position, vertex.normal, input.position.xyz, transform, width_percent, height_percent, instance_id);
+    vertex_processing::process_world_space(surface, vertex.position_previous, vertex.normal, input.position.xyz, transform_previous, width_percent, height_percent, instance_id, -buffer_frame.delta_time);
+    
     return vertex;
 }
 

@@ -28,19 +28,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../RHI_Texture.h"
 #include "../RHI_Buffer.h"
 #include "../RHI_Device.h"
-#include "../RHI_Swapchain.h"
+#include "../RHI_SwapChain.h"
 #include "../RHI_Queue.h"
-#include "../RHI_Shader.h"
 #include "../RHI_Pipeline.h"
+#include "../RHI_Shader.h"
 #include "../Rendering/Renderer_Buffers.h"
 #include "../Rendering/Renderer.h"
+#include "../Rendering/Material.h"
 #include "../World/Components/Renderable.h"
 #include "../World/Components/Camera.h"
 #include "../World/Entity.h"
 #include "../Core/Debugging.h"
 #include "../Input/Input.h"
 SP_WARNINGS_OFF
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <FidelityFX/host/backends/vk/ffx_vk.h>
 #include <FidelityFX/host/ffx_fsr3.h>
 #include <FidelityFX/host/ffx_sssr.h>
@@ -58,7 +59,7 @@ using namespace std;
 
 namespace spartan
 {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
     namespace
     {
         // shared among all contexts
@@ -367,8 +368,6 @@ namespace spartan
             {
                 if (context_created)
                 {
-                    RHI_Device::QueueWaitAll();
-
                     SP_ASSERT(ffxFsr3UpscalerContextDestroy(&context) == FFX_OK);
                     context_created = false;
 
@@ -741,11 +740,7 @@ namespace spartan
 
             bool                  context_created = false;
             FfxBreadcrumbsContext context         = {};
-
-            // FFX_BREADCRUMBS_ENABLE_THREAD_SYNCHRONIZATION doesn't seem to work
-            // that why these two exist
-            mutex mutex_marker_start;
-            mutex mutex_marker_end;
+            uint32_t gpu_queue_indices[2]         = { 0, 0 };
 
             void context_destroy()
             {
@@ -764,11 +759,8 @@ namespace spartan
 
                 if (!context_created && Debugging::IsBreadcrumbsEnabled())
                 {
-                    uint32_t gpu_queue_indices[2] =
-                    {
-                        RHI_Device::GetQueueIndex(RHI_Queue_Type::Graphics),
-                        RHI_Device::GetQueueIndex(RHI_Queue_Type::Compute)
-                    };
+                     gpu_queue_indices[0] = RHI_Device::GetQueueIndex(RHI_Queue_Type::Graphics);
+                     gpu_queue_indices[1] = RHI_Device::GetQueueIndex(RHI_Queue_Type::Compute);
 
                      FfxBreadcrumbsContextDescription context_description = {};
                      context_description.backendInterface                 = ffx_interface;
@@ -796,7 +788,7 @@ namespace spartan
 
     void RHI_FidelityFX::Initialize()
     {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
         // register FidelityFX version
         {
             string ffx_version = to_string(FFX_SDK_VERSION_MAJOR) + "." +
@@ -903,7 +895,7 @@ namespace spartan
 
     void RHI_FidelityFX::Shutdown()
     {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
         fsr3::context_destroy();
         brixelizer_gi::context_destroy();
         sssr::context_destroy();
@@ -932,6 +924,7 @@ namespace spartan
 
     void RHI_FidelityFX::Shutdown(const FidelityFX fx)
     {
+        #ifdef _MSC_VER
         if (fx == FidelityFX::Sssr)
         {
             sssr::context_destroy();
@@ -944,11 +937,12 @@ namespace spartan
         {
             fsr3::context_destroy();
         }
+        #endif
     }
 
     void RHI_FidelityFX::Tick(Cb_Frame* cb_frame)
     {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
         // matrices - ffx is right-handed
         {
             view_previous            = view;
@@ -993,7 +987,9 @@ namespace spartan
 
     void RHI_FidelityFX::Resize(const Vector2& resolution_render, const Vector2& resolution_output)
     {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
+        RHI_Device::QueueWaitAll();
+
         bool resolution_render_changed = resolution_render.x != resolution_render_width  || resolution_render.y != resolution_render_height;
         bool resolution_output_changed = resolution_output.x != resolution_output_width  || resolution_output.y != resolution_output_height;
 
@@ -1020,14 +1016,14 @@ namespace spartan
 
     void RHI_FidelityFX::FSR3_ResetHistory()
     {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
         fsr3::description_dispatch.reset = true;
     #endif
     }
 
     void RHI_FidelityFX::FSR3_GenerateJitterSample(float* x, float* y)
     {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
         // get jitter phase count
         const uint32_t resolution_render_x = static_cast<uint32_t>(fsr3::description_context.maxRenderSize.width);
         const uint32_t resolution_render_y = static_cast<uint32_t>(fsr3::description_context.maxRenderSize.height);
@@ -1060,7 +1056,7 @@ namespace spartan
         RHI_Texture* tex_output
     )
     {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
         SP_ASSERT(fsr3::context_created);
 
         // output is displayed in the viewport, so add a barrier to ensure any work is done before writting to it
@@ -1115,10 +1111,13 @@ namespace spartan
         RHI_Texture* tex_output
     )
     {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
         SP_ASSERT(sssr::context_created);
 
         // documentation: https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/blob/main/docs/techniques/stochastic-screen-space-reflections.md
+
+         // end the render pass (if there is one) as third-party code takes over here
+        cmd_list->RenderPassEnd();
 
         // set resources
         sssr::description_dispatch.commandList        = to_ffx_cmd_list(cmd_list);
@@ -1177,7 +1176,7 @@ namespace spartan
         RHI_Texture* tex_debug
     )
     {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
         SP_ASSERT(brixelizer_gi::context_created);
 
         // instances
@@ -1189,7 +1188,12 @@ namespace spartan
             // process entities
             for (int64_t i = index_start; i < index_end; i++)
             {
-                auto& entity                         = entities[i];
+                shared_ptr<Entity>& entity = entities[i];
+
+                // skip grass blades, it's going to bring it to a crawl
+                if (entity->GetComponent<Renderable>()->GetMaterial()->GetProperty(MaterialProperty::GrassBlade))
+                    continue;
+
                 uint64_t entity_id                   = entity->GetObjectId();
                 brixelizer_gi::entity_map[entity_id] = entity;
                 bool is_dynamic                      = entity->IsMoving();
@@ -1359,7 +1363,7 @@ namespace spartan
         RHI_Texture* tex_debug
     )
     {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
         SP_ASSERT(brixelizer_gi::context_created);
 
         bool debug_enabled  = brixelizer_gi::debug_mode != brixelizer_gi::DebugMode::Max;
@@ -1367,6 +1371,9 @@ namespace spartan
         bool debug_update   = debug_enabled && !debug_dispatch;
         if (debug_update)
             return;
+
+        // end the render pass (if there is one) as third-party code takes over here
+        cmd_list->RenderPassEnd();
 
         // set camera matrices
         set_ffx_float16(brixelizer_gi::description_dispatch_gi.view,           view);
@@ -1458,6 +1465,7 @@ namespace spartan
 
     void RHI_FidelityFX::BrixelizerGI_SetResolutionPercentage(const float resolution_percentage)
     {
+        #ifdef _MSC_VER
         if (resolution_percentage == 0.25f)
         {
             brixelizer_gi::internal_resolution = FFX_BRIXELIZER_GI_INTERNAL_RESOLUTION_25_PERCENT;
@@ -1480,10 +1488,12 @@ namespace spartan
         }
 
         brixelizer_gi::context_create();
+        #endif
     }
 
     void RHI_FidelityFX::Breadcrumbs_RegisterCommandList(RHI_CommandList* cmd_list, const RHI_Queue* queue, const char* name)
     {
+        #ifdef _MSC_VER
         // note: command lists need to register per frame
         SP_ASSERT(Debugging::IsBreadcrumbsEnabled());
     
@@ -1495,10 +1505,12 @@ namespace spartan
         description.submissionIndex                      = 0;
     
         SP_ASSERT(ffxBreadcrumbsRegisterCommandList(&breadcrumbs::context, &description) == FFX_OK);
+        #endif
     }
 
     void RHI_FidelityFX::Breadcrumbs_RegisterPipeline(RHI_Pipeline* pipeline)
     {
+        #ifdef _MSC_VER
         // note: pipelines need to register only once
 
         SP_ASSERT(Debugging::IsBreadcrumbsEnabled());
@@ -1535,31 +1547,45 @@ namespace spartan
         }
 
         SP_ASSERT(ffxBreadcrumbsRegisterPipeline(&breadcrumbs::context, &description) == FFX_OK);
+
+        #endif
     }
 
     void RHI_FidelityFX::Breadcrumbs_SetPipelineState(RHI_CommandList* cmd_list, RHI_Pipeline* pipeline)
     {
+        #ifdef _MSC_VER
+
         SP_ASSERT(Debugging::IsBreadcrumbsEnabled());
         SP_ASSERT(ffxBreadcrumbsSetPipeline(&breadcrumbs::context, to_ffx_cmd_list(cmd_list), to_ffx_pipeline(pipeline)) == FFX_OK);
+
+        #endif
     }
 
     void RHI_FidelityFX::Breadcrumbs_MarkerBegin(RHI_CommandList* cmd_list, const char* name)
     {
-        lock_guard<mutex> lock(breadcrumbs::mutex_marker_start); // without a mutex, after loading a world, a gpu crash can occur
+        #ifdef _MSC_VER
+
         SP_ASSERT(Debugging::IsBreadcrumbsEnabled());
         const FfxBreadcrumbsNameTag name_tag = { name, true };
         SP_ASSERT(ffxBreadcrumbsBeginMarker(&breadcrumbs::context, to_ffx_cmd_list(cmd_list), FFX_BREADCRUMBS_MARKER_PASS, &name_tag) == FFX_OK);
+
+        #endif
     }
 
     void RHI_FidelityFX::Breadcrumbs_MarkerEnd(RHI_CommandList* cmd_list)
     {
-        lock_guard<mutex> lock(breadcrumbs::mutex_marker_end); // without a mutex, after loading a world, a gpu crash can occur
+        #ifdef _MSC_VER
+
         SP_ASSERT(Debugging::IsBreadcrumbsEnabled());
         SP_ASSERT(ffxBreadcrumbsEndMarker(&breadcrumbs::context, to_ffx_cmd_list(cmd_list)) == FFX_OK);
+
+        #endif
     }
 
     void RHI_FidelityFX::Breadcrumbs_OnDeviceRemoved()
     {
+        #ifdef _MSC_VER
+
         FfxBreadcrumbsMarkersStatus marker_status = {};
         SP_ASSERT(ffxBreadcrumbsPrintStatus(&breadcrumbs::context, &marker_status) == FFX_OK);
 
@@ -1573,5 +1599,7 @@ namespace spartan
         }
 
         FFX_SAFE_FREE(marker_status.pBuffer, free);
+
+        #endif
     }
 }

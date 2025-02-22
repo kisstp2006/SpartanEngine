@@ -80,9 +80,11 @@ namespace spartan
         const uint8_t swap_chain_buffer_count = 2;
 
         // bindless
-        static array<RHI_Texture*, rhi_max_array_size> bindless_textures;
+        array<RHI_Texture*, rhi_max_array_size> bindless_textures;
+        array<Sb_Light, rhi_max_array_size_lights> binldess_lights;
         bool bindless_materials_dirty = true;
         bool bindless_lights_dirty    = true;
+        bool bindless_samplers_dirty  = true;
 
         // misc
         unordered_map<Renderer_Option, float> m_options;
@@ -151,6 +153,8 @@ namespace spartan
 
         // options
         {
+            bool low_quality = RHI_Device::GetPrimaryPhysicalDevice()->IsBelowMinimumRequirements();
+
             m_options.clear();
             SetOption(Renderer_Option::WhitePoint,                  350.0f);
             SetOption(Renderer_Option::Tonemapping,                 static_cast<float>(Renderer_Tonemapping::Max));
@@ -159,8 +163,8 @@ namespace spartan
             SetOption(Renderer_Option::DepthOfField,                1.0f);
             SetOption(Renderer_Option::ScreenSpaceAmbientOcclusion, 1.0f);
             SetOption(Renderer_Option::ScreenSpaceShadows,          static_cast<float>(Renderer_ScreenspaceShadow::Bend));
-            SetOption(Renderer_Option::ScreenSpaceReflections,      1.0f);
-            SetOption(Renderer_Option::GlobalIllumination,          0.5f);                                                 // 0.5 is the percentage of the internal resolution (options are 25%, 50%, 75% and 100%)
+            SetOption(Renderer_Option::ScreenSpaceReflections,      RHI_Device::GetPrimaryPhysicalDevice()->IsAmd() ? 1.0f : 0.0f); // temp workaround until I fix ssr for nvidia
+            SetOption(Renderer_Option::GlobalIllumination,          low_quality ? 0.0f : 0.5f);                                     // 0.5 is the percentage of the internal resolution (options are 25%, 50%, 75% and 100%)
             SetOption(Renderer_Option::Anisotropy,                  16.0f);
             SetOption(Renderer_Option::ShadowResolution,            4096.0f);
             SetOption(Renderer_Option::Sharpness,                   0.0f);                                                 // becomes the upsampler's sharpness as well
@@ -178,7 +182,6 @@ namespace spartan
             SetOption(Renderer_Option::Physics,                     0.0f);
             SetOption(Renderer_Option::PerformanceMetrics,          1.0f);
             SetOption(Renderer_Option::OcclusionCulling,            0.0f);                                                 // disabled by default as it's a WIP (you can see the query delays)
-            SetOption(Renderer_Option::Exposure,                    1.0f);
             SetOption(Renderer_Option::Gamma,                       Display::GetGamma());
 
             SetWind(Vector3(1.0f, 0.0f, 0.5f));
@@ -420,7 +423,7 @@ namespace spartan
         }
 
         // register this resolution as a display mode so it shows up in the editor's render options (it won't happen if already registered)
-        Display::RegisterDisplayMode(static_cast<uint32_t>(width), static_cast<uint32_t>(height), static_cast<uint32_t>(Timer::GetFpsLimit()), Display::GetIndex());
+        Display::RegisterDisplayMode(static_cast<uint32_t>(width), static_cast<uint32_t>(height), Timer::GetFpsLimit(), Display::GetId());
 
         SP_LOG_INFO("Output resolution output has been set to %dx%d", width, height);
     }
@@ -479,7 +482,8 @@ namespace spartan
             m_cb_frame_cpu.camera_far                          = camera->GetFarPlane();
             m_cb_frame_cpu.camera_position_previous            = m_cb_frame_cpu.camera_position;
             m_cb_frame_cpu.camera_position                     = camera->GetEntity()->GetPosition();
-            m_cb_frame_cpu.camera_direction                    = camera->GetEntity()->GetForward();
+            m_cb_frame_cpu.camera_forward                      = camera->GetEntity()->GetForward();
+            m_cb_frame_cpu.camera_right                        = camera->GetEntity()->GetRight();
             m_cb_frame_cpu.camera_last_movement_time           = (m_cb_frame_cpu.camera_position - m_cb_frame_cpu.camera_position_previous).LengthSquared() != 0.0f
                 ? static_cast<float>(Timer::GetTimeSec()) : m_cb_frame_cpu.camera_last_movement_time;
         }
@@ -569,6 +573,8 @@ namespace spartan
     void Renderer::OnClear()
     {
         m_renderables.clear();
+        bindless_textures.fill(nullptr);
+        binldess_lights.fill(Sb_Light());
     }
 
     void Renderer::OnFullScreenToggled()
@@ -621,6 +627,13 @@ namespace spartan
                 GetBuffer(Renderer_Buffer::SpdCounter)->ResetOffset();
                 GetBuffer(Renderer_Buffer::ConstantFrame)->ResetOffset();
             }
+        }
+
+        if (bindless_samplers_dirty)
+        {
+             RHI_Device::UpdateBindlessResources(nullptr, nullptr, nullptr, &Renderer::GetSamplers());
+
+             bindless_samplers_dirty = false;
         }
 
         if (bindless_materials_dirty)
@@ -909,42 +922,43 @@ namespace spartan
             // properties
             {
                 SP_ASSERT(index < rhi_max_array_size);
-    
-                properties[index].world_space_height     = material->GetProperty(MaterialProperty::WorldSpaceHeight);
-                properties[index].color.x                = material->GetProperty(MaterialProperty::ColorR);
-                properties[index].color.y                = material->GetProperty(MaterialProperty::ColorG);
-                properties[index].color.z                = material->GetProperty(MaterialProperty::ColorB);
-                properties[index].color.w                = material->GetProperty(MaterialProperty::ColorA);
-                properties[index].tiling_uv.x            = material->GetProperty(MaterialProperty::TextureTilingX);
-                properties[index].tiling_uv.y            = material->GetProperty(MaterialProperty::TextureTilingY);
-                properties[index].offset_uv.x            = material->GetProperty(MaterialProperty::TextureOffsetX);
-                properties[index].offset_uv.y            = material->GetProperty(MaterialProperty::TextureOffsetY);
-                properties[index].roughness_mul          = material->GetProperty(MaterialProperty::Roughness);
-                properties[index].metallic_mul           = material->GetProperty(MaterialProperty::Metalness);
-                properties[index].normal_mul             = material->GetProperty(MaterialProperty::Normal);
-                properties[index].height_mul             = material->GetProperty(MaterialProperty::Height);
-                properties[index].anisotropic            = material->GetProperty(MaterialProperty::Anisotropic);
-                properties[index].anisotropic_rotation   = material->GetProperty(MaterialProperty::AnisotropicRotation);
-                properties[index].clearcoat              = material->GetProperty(MaterialProperty::Clearcoat);
-                properties[index].clearcoat_roughness    = material->GetProperty(MaterialProperty::Clearcoat_Roughness);
-                properties[index].sheen                  = material->GetProperty(MaterialProperty::Sheen);
-                properties[index].sheen_tint             = material->GetProperty(MaterialProperty::SheenTint);
-                properties[index].subsurface_scattering  = material->GetProperty(MaterialProperty::SubsurfaceScattering);
-                properties[index].ior                    = material->GetProperty(MaterialProperty::Ior);
+
+                properties[index].local_width           = material->GetProperty(MaterialProperty::LocalWidth);
+                properties[index].local_height          = material->GetProperty(MaterialProperty::LocalHeight);
+                properties[index].color.x               = material->GetProperty(MaterialProperty::ColorR);
+                properties[index].color.y               = material->GetProperty(MaterialProperty::ColorG);
+                properties[index].color.z               = material->GetProperty(MaterialProperty::ColorB);
+                properties[index].color.w               = material->GetProperty(MaterialProperty::ColorA);
+                properties[index].tiling_uv.x           = material->GetProperty(MaterialProperty::TextureTilingX);
+                properties[index].tiling_uv.y           = material->GetProperty(MaterialProperty::TextureTilingY);
+                properties[index].offset_uv.x           = material->GetProperty(MaterialProperty::TextureOffsetX);
+                properties[index].offset_uv.y           = material->GetProperty(MaterialProperty::TextureOffsetY);
+                properties[index].roughness_mul         = material->GetProperty(MaterialProperty::Roughness);
+                properties[index].metallic_mul          = material->GetProperty(MaterialProperty::Metalness);
+                properties[index].normal_mul            = material->GetProperty(MaterialProperty::Normal);
+                properties[index].height_mul            = material->GetProperty(MaterialProperty::Height);
+                properties[index].anisotropic           = material->GetProperty(MaterialProperty::Anisotropic);
+                properties[index].anisotropic_rotation  = material->GetProperty(MaterialProperty::AnisotropicRotation);
+                properties[index].clearcoat             = material->GetProperty(MaterialProperty::Clearcoat);
+                properties[index].clearcoat_roughness   = material->GetProperty(MaterialProperty::Clearcoat_Roughness);
+                properties[index].sheen                 = material->GetProperty(MaterialProperty::Sheen);
+                properties[index].subsurface_scattering = material->GetProperty(MaterialProperty::SubsurfaceScattering);
+                properties[index].ior                   = material->GetProperty(MaterialProperty::Ior);
               
                 // flags
-                properties[index].flags  = material->HasTextureOfType(MaterialTextureType::Height)       ? (1U << 0)  : 0;
-                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Normal)       ? (1U << 1)  : 0;
-                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Color)        ? (1U << 2)  : 0;
-                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Roughness)    ? (1U << 3)  : 0;
-                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Metalness)    ? (1U << 4)  : 0;
-                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::AlphaMask)    ? (1U << 5)  : 0;
-                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Emission)     ? (1U << 6)  : 0;
-                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Occlusion)    ? (1U << 7)  : 0;
-                properties[index].flags |= material->GetProperty(MaterialProperty::TextureSlopeBased)    ? (1U << 8)  : 0;
-                properties[index].flags |= material->GetProperty(MaterialProperty::AnimationFoliageWind) ? (1U << 9)  : 0;
-                properties[index].flags |= material->GetProperty(MaterialProperty::AnimationWaterFlow)   ? (1U << 10) : 0;
-                properties[index].flags |= material->IsTessellated()                                     ? (1U << 11) : 0;
+                properties[index].flags  = material->HasTextureOfType(MaterialTextureType::Height)          ? (1U << 0)  : 0;
+                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Normal)          ? (1U << 1)  : 0;
+                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Color)           ? (1U << 2)  : 0;
+                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Roughness)       ? (1U << 3)  : 0;
+                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Metalness)       ? (1U << 4)  : 0;
+                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::AlphaMask)       ? (1U << 5)  : 0;
+                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Emission)        ? (1U << 6)  : 0;
+                properties[index].flags |= material->HasTextureOfType(MaterialTextureType::Occlusion)       ? (1U << 7)  : 0;
+                properties[index].flags |= material->GetProperty(MaterialProperty::TextureSlopeBased)       ? (1U << 8)  : 0;
+                properties[index].flags |= material->GetProperty(MaterialProperty::AnimationFoliageWind)    ? (1U << 9)  : 0;
+                properties[index].flags |= material->GetProperty(MaterialProperty::GrassBlade)              ? (1U << 10) : 0;
+                properties[index].flags |= material->GetProperty(MaterialProperty::AnimationWaterFlow)      ? (1U << 11) : 0;
+                properties[index].flags |= material->IsTessellated()                                        ? (1U << 12) : 0;
                 // when changing the bit flags, ensure that you also update the Surface struct in common_structs.hlsl, so that it reads those flags as expected
             }
     
@@ -1014,8 +1028,6 @@ namespace spartan
 
     void Renderer::BindlessUpdateLights(RHI_CommandList* cmd_list)
     {
-        static array<Sb_Light, rhi_max_array_size_lights> properties;
-
         if (ProgressTracker::IsLoading())
             return;
 
@@ -1025,7 +1037,7 @@ namespace spartan
         // cpu
         {
             // clear
-            properties.fill(Sb_Light{});
+            binldess_lights.fill(Sb_Light());
 
             // go through each light
             for (shared_ptr<Entity>& entity : m_renderables[Renderer_Entity::Light])
@@ -1042,29 +1054,29 @@ namespace spartan
                             if (light->GetLightType() == LightType::Point)
                             {
                                 // we do paraboloid projection in the vertex shader so we only want the view here
-                                properties[index].view_projection[i] = light->GetViewMatrix(i);
+                                binldess_lights[index].view_projection[i] = light->GetViewMatrix(i);
                             }
                             else
                             { 
-                                properties[index].view_projection[i] = light->GetViewMatrix(i) * light->GetProjectionMatrix(i);
+                                binldess_lights[index].view_projection[i] = light->GetViewMatrix(i) * light->GetProjectionMatrix(i);
                             }
                         }
                     }
 
-                    properties[index].intensity  = light->GetIntensityWatt();
-                    properties[index].range      = light->GetRange();
-                    properties[index].angle      = light->GetAngle();
-                    properties[index].color      = light->GetColor();
-                    properties[index].position   = light->GetEntity()->GetPosition();
-                    properties[index].direction  = light->GetEntity()->GetForward();
-                    properties[index].flags      = 0;
-                    properties[index].flags     |= light->GetLightType() == LightType::Directional  ? (1 << 0) : 0;
-                    properties[index].flags     |= light->GetLightType() == LightType::Point        ? (1 << 1) : 0;
-                    properties[index].flags     |= light->GetLightType() == LightType::Spot         ? (1 << 2) : 0;
-                    properties[index].flags     |= light->GetFlag(LightFlags::Shadows)            ? (1 << 3) : 0;
-                    properties[index].flags     |= light->GetFlag(LightFlags::ShadowsTransparent) ? (1 << 4) : 0;
-                    properties[index].flags     |= (light->GetFlag(LightFlags::ShadowsScreenSpace) && GetOption<bool>(Renderer_Option::ScreenSpaceShadows)) ? (1 << 5) : 0;
-                    properties[index].flags     |= (light->GetFlag(LightFlags::Volumetric) && GetOption<bool>(Renderer_Option::FogVolumetric)) ? (1 << 6) : 0;
+                    binldess_lights[index].intensity  = light->GetIntensityWatt();
+                    binldess_lights[index].range      = light->GetRange();
+                    binldess_lights[index].angle      = light->GetAngle();
+                    binldess_lights[index].color      = light->GetColor();
+                    binldess_lights[index].position   = light->GetEntity()->GetPosition();
+                    binldess_lights[index].direction  = light->GetEntity()->GetForward();
+                    binldess_lights[index].flags      = 0;
+                    binldess_lights[index].flags     |= light->GetLightType() == LightType::Directional  ? (1 << 0) : 0;
+                    binldess_lights[index].flags     |= light->GetLightType() == LightType::Point        ? (1 << 1) : 0;
+                    binldess_lights[index].flags     |= light->GetLightType() == LightType::Spot         ? (1 << 2) : 0;
+                    binldess_lights[index].flags     |= light->GetFlag(LightFlags::Shadows)            ? (1 << 3) : 0;
+                    binldess_lights[index].flags     |= light->GetFlag(LightFlags::ShadowsTransparent) ? (1 << 4) : 0;
+                    binldess_lights[index].flags     |= (light->GetFlag(LightFlags::ShadowsScreenSpace) && GetOption<bool>(Renderer_Option::ScreenSpaceShadows)) ? (1 << 5) : 0;
+                    binldess_lights[index].flags     |= (light->GetFlag(LightFlags::Volumetric) && GetOption<bool>(Renderer_Option::FogVolumetric)) ? (1 << 6) : 0;
                     // when changing the bit flags, ensure that you also update the Light struct in common_structs.hlsl, so that it reads those flags as expected
 
                     index++;
@@ -1076,7 +1088,12 @@ namespace spartan
         uint32_t update_size = static_cast<uint32_t>(sizeof(Sb_Light)) * index;
         RHI_Buffer* buffer   = GetBuffer(Renderer_Buffer::LightParameters);
         buffer->ResetOffset();
-        buffer->Update(cmd_list, &properties[0], update_size);
+        buffer->Update(cmd_list, &binldess_lights[0], update_size);
+    }
+
+    void Renderer::BindlessUpdateSamplers()
+    {
+        bindless_samplers_dirty = true;
     }
 
     void Renderer::Screenshot(const string& file_path)

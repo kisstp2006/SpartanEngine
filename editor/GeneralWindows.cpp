@@ -42,21 +42,23 @@ namespace
 
     namespace sponsor
     {
-        bool visible      = true;
-        const float width = 512.0f;
+        bool visible = true;
 
         void window()
         {
-            ImGui::SetNextWindowSize(ImVec2(width, width * 0.52f));
-            if (ImGui::Begin("Support Spartan Engine", &visible, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoDocking))
+            if (!visible)
+                return;
+
+            ImGui::SetNextWindowPos(editor->GetWidget<Viewport>()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            if (ImGui::Begin("Support Spartan Engine", &visible, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize))
             {
-                ImGui::SetNextItemWidth(width);
-                ImGui::TextWrapped(
-                    "I cover the costs for Dropbox hosting and a GitHub Pro subscription for benefits like assets and package bandwidth."
-                    ""
-                    "If you enjoy the simplicity of running a single script and have everything just work, please consider sponsoring to help keep everything running smoothly!"
-                );
+                ImGui::PushItemWidth(500.0f * spartan::Window::GetDpiScale());
+                ImGui::Text("I cover the costs for Dropbox hosting and a GitHub Pro subscription for benefits like assets and package bandwidth.");
+                ImGui::Text("If you enjoy the simplicity of running a single script and have everything just work, please consider sponsoring to help keep everything running smoothly!");
+                ImGui::PopItemWidth();
+
                 ImGui::Separator();
+
                 if (ImGuiSp::button_centered_on_line("Sponsor"))
                 {
                     spartan::FileSystem::OpenUrl("https://github.com/sponsors/PanosK92");
@@ -68,16 +70,22 @@ namespace
 
     namespace introduction
     {
-        bool visible      = true;
-        const float width = 512.0f;
+        bool visible = true;
 
         void window()
         {
-            ImGui::SetNextWindowSize(ImVec2(width, width * 0.36f));
-            if (ImGui::Begin("What should you expect", &visible, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoDocking))
+             if (!visible)
+                return;
+
+            ImGui::SetNextWindowPos(editor->GetWidget<Viewport>()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            if (ImGui::Begin("What should you expect", &visible, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize))
             {
-                ImGui::TextWrapped("This isn't an engine for the average user, it's designed for advanced research and experimentation, ideal for industry veterans.");
+                ImGui::PushItemWidth(500.0f * spartan::Window::GetDpiScale());
+                ImGui::Text("This isn't an engine for the average user, it's designed for advanced research and experimentation, ideal for industry veterans.");
+                ImGui::PopItemWidth();
+
                 ImGui::Separator();
+
                 if (ImGuiSp::button_centered_on_line("Ok"))
                 {
                     visible = false;
@@ -114,21 +122,21 @@ namespace
 
         vector<string> contributors =
         {
-            // role,  name,                country,       button text,   button url,                                               contribution,                                                    steam key
-            "Spartan, Iker Galardi,        Basque Country,   LinkedIn,   https://www.linkedin.com/in/iker-galardi/,                Linux port (WIP),                                                N/A",
-            "Spartan, Jesse Guerrero,      United States,    LinkedIn,   https://www.linkedin.com/in/jguer,                        UX improvements,                                                 N/A",
-            "Spartan, Konstantinos Benos,  Greece,           X,          https://twitter.com/deg3x,                                Bug fixes & editor theme improvements,                           N/A",
-            "Spartan, Nick Polyderopoulos, Greece,           LinkedIn,   https://www.linkedin.com/in/nick-polyderopoulos-21742397, UX improvements,                                                 N/A",
-            "Spartan, Panos Kolyvakis,     Greece,           LinkedIn,   https://www.linkedin.com/in/panos-kolyvakis-66863421a/,   Improved water buoyancy,                                         N/A",
-            "Spartan, Tri Tran,            Belgium,          LinkedIn,   https://www.linkedin.com/in/mtrantr/,                     Days Gone screen space shadows,                                  Starfield",
-            "Spartan, Ege,                 Turkey,           X,          https://x.com/egedq,                                      Editor theme & ability to save/load themes,                      N/A",
-            "Hoplite, Apostolos Bouzalas,  Greece,           LinkedIn,   https://www.linkedin.com/in/apostolos-bouzalas,           Provided performance reports,                                    N/A",
-            "Hoplite, Nikolas Pattakos,    Greece,           LinkedIn,   https://www.linkedin.com/in/nikolaspattakos/,             GCC compile fixes,                                               N/A",
-            "Hoplite, Sandro Mtchedlidze,  Georgia,          Artstation, https://www.artstation.com/sandromch,                     Added Nautilus tonemapper & spotted lighting/performance issues, N/A",
-            "Hoplite, Roman Koshchei,      Ukraine,          X,          https://x.com/roman_koshchei,                             Circular stack for the undo/redo system,                         N/A",
-            "Hoplite, Kristi Kercyku,      Albania,          GitHub,     https://github.com/kristiker,                             Identified g-buffer depth testing issue,                         N/A",
-            "Hoplite, Kinjal Kishor,       India,            X,          https://x.com/kinjalkishor,                               Supported with testing & technical issues,                       N/A",
-            //"Patron,  Kiss Tibor,          Hungary,          GitHub,     https://github.com/kisstp2006,                            GitHub Sponsor,                                                  N/A"
+            // role,  name,                country,       button text,   button url,                                               contribution,                                              steam key
+            "Spartan, Iker Galardi,        Basque Country,   LinkedIn,   https://www.linkedin.com/in/iker-galardi/,                Linux port (WIP),                                          N/A",
+            "Spartan, Jesse Guerrero,      United States,    LinkedIn,   https://www.linkedin.com/in/jguer,                        UX improvements,                                           N/A",
+            "Spartan, Konstantinos Benos,  Greece,           X,          https://twitter.com/deg3x,                                Bug fixes & editor theme improvements,                     N/A",
+            "Spartan, Nick Polyderopoulos, Greece,           LinkedIn,   https://www.linkedin.com/in/nick-polyderopoulos-21742397, UX improvements,                                           N/A",
+            "Spartan, Panos Kolyvakis,     Greece,           LinkedIn,   https://www.linkedin.com/in/panos-kolyvakis-66863421a/,   Improved water buoyancy,                                   N/A",
+            "Spartan, Tri Tran,            Belgium,          LinkedIn,   https://www.linkedin.com/in/mtrantr/,                     Days Gone screen space shadows,                            Starfield",
+            "Spartan, Ege,                 Turkey,           X,          https://x.com/egedq,                                      Editor theme & ability to save/load themes,                N/A",
+            "Hoplite, Apostolos Bouzalas,  Greece,           LinkedIn,   https://www.linkedin.com/in/apostolos-bouzalas,           Provided performance reports,                              N/A",
+            "Hoplite, Nikolas Pattakos,    Greece,           LinkedIn,   https://www.linkedin.com/in/nikolaspattakos/,             GCC compile fixes,                                         N/A",
+            "Hoplite, Sandro Mtchedlidze,  Georgia,          Artstation, https://www.artstation.com/sandromch,                     Nautilus tonemapper & spotted lighting/performance issues, N/A",
+            "Hoplite, Roman Koshchei,      Ukraine,          X,          https://x.com/roman_koshchei,                             Circular stack for the undo/redo system,                   N/A",
+            "Hoplite, Kristi Kercyku,      Albania,          GitHub,     https://github.com/kristiker,                             Identified g-buffer depth testing issue,                   N/A",
+            "Hoplite, Kinjal Kishor,       India,            X,          https://x.com/kinjalkishor,                               Supported with testing & technical issues,                 N/A",
+            //"Patron,  Kiss Tibor,          Hungary,          GitHub,     https://github.com/kisstp2006,                            GitHub Sponsor,                                            N/A"
         };
 
         vector<string> comma_seperate_contributors(const vector<string>& contributors)
@@ -167,206 +175,187 @@ namespace
         
             return result;
         }
-    
-        void window()
+
+        void personal_details()
+        {
+            ImGui::BeginGroup();
+            {
+                // shift text that the buttons and the text align
+                static const float y_shift = 6.0f;
+            
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
+                ImGui::Text("Creator");
+            
+                ImGui::SameLine();
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - y_shift);
+                if (ImGuiSp::button("Panos Karabelas"))
+                {
+                    spartan::FileSystem::OpenUrl("https://panoskarabelas.com/");
+                }
+            
+                ImGui::SameLine();
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - y_shift);
+                if (ImGuiSp::button("GitHub"))
+                {
+                    spartan::FileSystem::OpenUrl("https://github.com/PanosK92/SpartanEngine");
+                }
+            
+                ImGui::SameLine();
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - y_shift);
+                if (ImGuiSp::button("X"))
+                {
+                    spartan::FileSystem::OpenUrl("https://twitter.com/panoskarabelas1");
+                }
+            }
+            ImGui::EndGroup();
+        }
+
+        void contributors_table()
         {
             static vector<string> comma_seperated_contributors = comma_seperate_contributors(contributors);
-        
-            static const string window_title  = "Spartan " + to_string(sp_info::version_major) + "." + to_string(sp_info::version_minor) + "." + to_string(sp_info::version_revision);
-            const ImGuiTableFlags table_flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit;
 
-            ImGui::SetNextWindowPos(editor->GetWidget<Viewport>()->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowFocus();
+            ImGui::Text("Contributors");
+            if (ImGui::BeginTable("##contributors_table", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+            {
+                ImGui::TableSetupColumn("Title", 0, -1.0f);
+                ImGui::TableSetupColumn("Name", 0, -1.0f);
+                ImGui::TableSetupColumn("Country", 0, -1.0f);
+                ImGui::TableSetupColumn("URL", 0, -1.0f);
+                ImGui::TableSetupColumn("Contribution", 0, -1.0f);
+                ImGui::TableSetupColumn("Steam Key", 0, -1.0f);
+                ImGui::TableHeadersRow();
+            
+                uint32_t index = 0;
+                for (uint32_t i = 0; i < static_cast<uint32_t>(contributors.size()); i++)
+                {
+                    // switch row
+                    ImGui::TableNextRow();
+            
+                    // shift text down so that it's on the same line with the button
+                    static const float y_shift = 8.0f;
+            
+                    // role
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
+                    ImGui::Text(comma_seperated_contributors[index++].c_str());
+            
+                    // name
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
+                    ImGui::Text(comma_seperated_contributors[index++].c_str());
+            
+                    // country
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
+                    ImGui::Text(comma_seperated_contributors[index++].c_str());
+            
+                    // button (url)
+                    ImGui::TableSetColumnIndex(3);
+                    string& button_text = comma_seperated_contributors[index++];
+                    string& button_url  = comma_seperated_contributors[index++];
+            
+                    // calculate center position for the button
+                    float cell_width    = ImGui::GetColumnWidth();
+                    float button_width  = ImGui::CalcTextSize(button_text.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+                    float button_offset = (cell_width - button_width) * 0.5f;
+            
+                    // set cursor position to center the button
+                    ImGui::PushID(static_cast<uint32_t>(ImGui::GetCursorScreenPos().y));
+                    if (ImGui::Button(button_text.c_str()))
+                    {
+                        spartan::FileSystem::OpenUrl(button_url);
+                    }
+                    ImGui::PopID();
+            
+                    // contribution
+                    ImGui::TableSetColumnIndex(4);
+                    ImGui::Text(comma_seperated_contributors[index++].c_str());
+            
+                    // steam key award
+                    ImGui::TableSetColumnIndex(5);
+                    ImGui::Text(comma_seperated_contributors[index++].c_str());
+                }
+            }
+            ImGui::EndTable();
+        }
+
+        void third_party_libraries()
+        {
+            ImGui::BeginGroup();
+            {
+                ImGui::Text("Third party libraries");
+                if (ImGui::BeginTable("##third_party_libs_table", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+                {
+                    ImGui::TableSetupColumn("Name", 0, -1.0f);
+                    ImGui::TableSetupColumn("Version", 0, -1.0f);
+                    ImGui::TableSetupColumn("URL", 0, -1.0f);
+                    ImGui::TableHeadersRow();
+            
+                    for (const spartan::third_party_lib& lib : spartan::Settings::GetThirdPartyLibs())
+                    {
+                        // switch row
+                        ImGui::TableNextRow();
+            
+                        // shift text down so that it's on the same line with the button
+                        static const float y_shift = 8.0f;
+            
+                        // name
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
+                        ImGui::Text(lib.name.c_str());
+            
+                        // version
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
+                        ImGui::Text(lib.version.c_str());
+            
+                        // url
+                        ImGui::TableSetColumnIndex(2);
+                        ImGui::PushID(lib.url.c_str());
+                        if (ImGuiSp::button("URL"))
+                        {
+                            spartan::FileSystem::OpenUrl(lib.url);
+                        }
+                        ImGui::PopID();
+                    }
+                    ImGui::EndTable();
+                }
+            }
+            ImGui::EndGroup();
+        }
+
+        void window()
+        {
+             if (!visible)
+                return;
+
+            static const string window_title = "Spartan " + to_string(sp_info::version_major) + "." + to_string(sp_info::version_minor) + "." + to_string(sp_info::version_revision);
+
+            ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
             ImGui::Begin(window_title.c_str(), &visible, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking);
             {
                 ImGui::BeginGroup();
                 {
-                    // shift text that the buttons and the text align
-                    static const float y_shift = 6.0f;
-        
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
-                    ImGui::Text("Creator");
-        
-                    ImGui::SameLine();
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - y_shift);
-                    if (ImGuiSp::button("Panos Karabelas"))
-                    {
-                        spartan::FileSystem::OpenUrl("https://panoskarabelas.com/");
-                    }
-        
-                    ImGui::SameLine();
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - y_shift);
-                    if (ImGuiSp::button("GitHub"))
-                    {
-                        spartan::FileSystem::OpenUrl("https://github.com/PanosK92/SpartanEngine");
-                    }
-        
-                    ImGui::SameLine();
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - y_shift);
-                    if (ImGuiSp::button("X"))
-                    {
-                        spartan::FileSystem::OpenUrl("https://twitter.com/panoskarabelas1");
-                    }
-                }
-                ImGui::EndGroup();
-        
-                // group: license
-                ImGui::BeginGroup();
-                ImGui::Separator();
-                ImGui::TextWrapped(license_text);
-                ImGui::EndGroup();
-        
-                ImGui::Separator();
-                ImGui::Dummy(ImVec2(0.0f, 10.0f));
-        
-                // group: contributors
-                ImGui::SameLine();
-                ImGui::BeginGroup();
-                {
-                ImGui::Text("Contributors");
-                if (ImGui::BeginTable("##contributors_table", 6, table_flags, ImVec2(ImGui::GetContentRegionAvail().x * 0.74f, 0.0f)))
-                {
-                    ImGui::TableSetupColumn("Title");
-                    ImGui::TableSetupColumn("Name");
-                    ImGui::TableSetupColumn("Country");
-                    ImGui::TableSetupColumn("URL");
-                    ImGui::TableSetupColumn("Contribution");
-                    ImGui::TableSetupColumn("Steam Key");
-                    ImGui::TableHeadersRow();
-    
-                    uint32_t index = 0;
-                    for (uint32_t i = 0; i < static_cast<uint32_t>(contributors.size()); i++)
-                    {
-                        // switch row
-                        ImGui::TableNextRow();
-    
-                        // shift text down so that it's on the same line with the button
-                        static const float y_shift = 8.0f;
-    
-                        // role
-                        ImGui::TableSetColumnIndex(0);
-                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
-                        ImGui::Text(comma_seperated_contributors[index++].c_str());
-    
-                        // name
-                        ImGui::TableSetColumnIndex(1);
-                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
-                        ImGui::Text(comma_seperated_contributors[index++].c_str());
-    
-                        // country
-                        ImGui::TableSetColumnIndex(2);
-                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
-                        ImGui::Text(comma_seperated_contributors[index++].c_str());
-    
-                        // button (url)
-                        ImGui::TableSetColumnIndex(3);
-                        string& button_text = comma_seperated_contributors[index++];
-                        string& button_url  = comma_seperated_contributors[index++];
+                    // my details
+                    personal_details();
 
-                        // calculate center position for the button
-                        float cell_width    = ImGui::GetColumnWidth();
-                        float button_width  = ImGui::CalcTextSize(button_text.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-                        float button_offset = (cell_width - button_width) * 0.5f;
+                    ImGui::Separator();
 
-                        // set cursor position to center the button
-                        ImGui::PushID(static_cast<uint32_t>(ImGui::GetCursorScreenPos().y));
-                        if (ImGui::Button(button_text.c_str()))
-                        {
-                            spartan::FileSystem::OpenUrl(button_url);
-                        }
-                        ImGui::PopID();
-    
-                        // contribution
-                        ImGui::TableSetColumnIndex(4);
-                        ImGui::Text(comma_seperated_contributors[index++].c_str());
-    
-                        // steam key award
-                        ImGui::TableSetColumnIndex(5);
-                        ImGui::Text(comma_seperated_contributors[index++].c_str());
-                    }
-                }
-                ImGui::EndTable();
-    
-                // group: role explanations
-                ImGui::BeginGroup();
-                {
-                    ImGui::Text("Roles");
-    
-                    // create a table with 3 columns
-                    ImGui::BeginTable("RoleDescriptions", 3, ImGuiTableFlags_Borders, ImVec2(ImGui::GetContentRegionAvail().x * 0.725f, 0.0f));
-                    ImGui::TableSetupColumn("Name");
-                    ImGui::TableSetupColumn("In Ancient Sparta");
-                    ImGui::TableSetupColumn("In The Engine");
-                    ImGui::TableHeadersRow();
-    
-                    // add rows to the table
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Spartan"); ImGui::TableNextColumn();
-                    ImGui::Text("Elite warriors of Sparta, known for their strength and discipline."); ImGui::TableNextColumn();
-                    ImGui::Text("Considerable contributions.");
-                    
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Hoplite"); ImGui::TableNextColumn();
-                    ImGui::Text("Armed citizens and infantry soldiers, typically equipped with a spear and shield."); ImGui::TableNextColumn();
-                    ImGui::Text("Minor contributions.");
-                    
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Patron"); ImGui::TableNextColumn();
-                    ImGui::Text("Financial supporters and benefactors who provide resources for the community."); ImGui::TableNextColumn();
-                    ImGui::Text("Monetary contributions.");
-                    
-                    ImGui::EndTable();
+                    // license
+                    float max_width = 500.0f * spartan::Window::GetDpiScale();
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + max_width);
+                    ImGui::TextWrapped(license_text);
+                    ImGui::PopTextWrapPos();
+
+                    ImGui::SameLine();
+
+                    third_party_libraries();
                 }
                 ImGui::EndGroup();
-            }
-                ImGui::EndGroup();
-        
-                // group: third party libraries
-                ImGui::SameLine();
-                ImGui::BeginGroup();
-                {
-                    ImGui::Text("Third party libraries");
-                    if (ImGui::BeginTable("##third_party_libs_table", 3, table_flags))
-                    {
-                        ImGui::TableSetupColumn("Name");
-                        ImGui::TableSetupColumn("Version");
-                        ImGui::TableSetupColumn("URL");
-                        ImGui::TableHeadersRow();
-        
-                        for (const spartan::third_party_lib& lib : spartan::Settings::GetThirdPartyLibs())
-                        {
-                            // switch row
-                            ImGui::TableNextRow();
-        
-                            // shift text down so that it's on the same line with the button
-                            static const float y_shift = 8.0f;
-        
-                            // name
-                            ImGui::TableSetColumnIndex(0);
-                            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
-                            ImGui::Text(lib.name.c_str());
-        
-                            // version
-                            ImGui::TableSetColumnIndex(1);
-                            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + y_shift);
-                            ImGui::Text(lib.version.c_str());
-        
-                            // url
-                            ImGui::TableSetColumnIndex(2);
-                            ImGui::PushID(lib.url.c_str());
-                            if (ImGuiSp::button("URL"))
-                            {
-                                spartan::FileSystem::OpenUrl(lib.url);
-                            }
-                            ImGui::PopID();
-                        }
-                        ImGui::EndTable();
-                    }
-                }
-                ImGui::EndGroup();
+
+                ImGui::Separator();
+
+                contributors_table();
             }
             ImGui::End();
         }
@@ -398,6 +387,9 @@ namespace
 
         void window()
         {
+            if (!visible)
+                return;
+
             ImGui::SetNextWindowPos(editor->GetWidget<Viewport>()->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
             ImGui::SetNextWindowFocus();
             ImGui::Begin("Shortcuts & Input Reference", &visible, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking);
@@ -461,7 +453,6 @@ namespace
             if (visible_download_prompt)
             {
                 ImGui::SetNextWindowPos(editor->GetWidget<Viewport>()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-                ImGui::SetNextWindowSize(ImVec2(300, 150), ImGuiCond_FirstUseEver);
                 if (ImGui::Begin("Default worlds", &visible_download_prompt, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize))
                 {
                     ImGui::Text("No default worlds are present. Would you like to download them?");
@@ -495,7 +486,7 @@ namespace
 
             if (visible_world_list)
             {
-                ImGui::SetNextWindowPos(editor->GetWidget<Viewport>()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                ImGui::SetNextWindowPos(editor->GetWidget<Viewport>()->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
                 if (ImGui::Begin("World selection", &visible_world_list, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize))
                 {
                     ImGui::Text("Select the world you would like to load and click \"Ok\"");
@@ -554,27 +545,11 @@ void GeneralWindows::Tick()
 {
     // windows
     {
-        if (sponsor::visible)
-        { 
-            sponsor::window();
-        }
-
-        if (introduction::visible)
-        { 
-            introduction::window();
-        }
-
-        if (about::visible)
-        {
-            about::window();
-        }
-
-        if (shortcuts::visible)
-        {
-            shortcuts::window();
-        }
-
         worlds::window();
+        introduction::window();
+        sponsor::window();
+        about::window();
+        shortcuts::window();
     }
 
     // shortcuts
@@ -584,6 +559,16 @@ void GeneralWindows::Tick()
             shortcuts::visible = !shortcuts::visible;
         }
     }
+}
+
+bool GeneralWindows::GetVisibilityWorlds()
+{
+    return worlds::visible_world_list;
+}
+
+void GeneralWindows::SetVisibilityWorlds(const bool visibility)
+{
+    worlds::visible_world_list = visibility;
 }
 
 bool* GeneralWindows::GetVisiblityWindowAbout()

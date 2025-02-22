@@ -194,10 +194,9 @@ function runtime_project_configuration()
 
         -- Includes
         if os.target() == "windows" then
-            includedirs { "../third_party/sdl/sdl" }
+            includedirs { "../third_party/sdl" }
             includedirs { "../third_party/assimp" }
             includedirs { "../third_party/bullet" }
-            includedirs { "../third_party/fmod" }
             includedirs { "../third_party/free_image" }
             includedirs { "../third_party/free_type" }
             includedirs { "../third_party/compressonator" }
@@ -208,7 +207,7 @@ function runtime_project_configuration()
 			includedirs { "../third_party/dxc" }
             includedirs(API_INCLUDES[ARG_API_GRAPHICS] or {})
         else
-            includedirs { "/usr/include/SDL2" }
+            includedirs { "/usr/include/SDL3" }
             includedirs { "/usr/include/assimp" }
             includedirs { "/usr/include/bullet" }
             includedirs { "/usr/include/freetype2" }
@@ -226,11 +225,10 @@ function runtime_project_configuration()
             targetdir (TARGET_DIR)
             links { "dxcompiler" }
             links { "assimp" }
-            links { "fmod_vc" }
             links { "FreeImageLib" }
             links { "freetype" }
             links { "BulletCollision", "BulletDynamics", "BulletSoftBody", "LinearMath" }
-            links { "SDL2" }
+            links { "SDL3" }
             links { "Compressonator_MT" }
 			links { "OpenImageDenoise" , "OpenImageDenoise_core", "OpenImageDenoise_utils" }
 			links { "meshoptimizer" }
@@ -243,11 +241,10 @@ function runtime_project_configuration()
             if os.target() == "windows" then
                 links { "dxcompiler" }
                 links { "assimp_debug" }
-                links { "fmodL_vc" }
                 links { "FreeImageLib_debug" }
                 links { "freetype_debug" }
                 links { "BulletCollision_debug", "BulletDynamics_debug", "BulletSoftBody_debug", "LinearMath_debug" }
-                links { "SDL2_debug" }
+                links { "SDL3_debug" }
                 links { "Compressonator_MT_debug" }
 				links { "OpenImageDenoise_debug" , "OpenImageDenoise_core_debug", "OpenImageDenoise_utils_debug" }
 				links { "meshoptimizer_debug" }
@@ -255,11 +252,10 @@ function runtime_project_configuration()
             else
                 links { "dxcompiler" }
                 links { "assimp" }
-                links { "fmod_vc" }
                 links { "FreeImageLib" }
                 links { "freetype" }
                 links { "BulletCollision", "BulletDynamics", "BulletSoftBody", "LinearMath" }
-                links { "SDL2" }
+                links { "SDL3" }
                 links { "Compressonator_MT" }
 				links { "OpenImageDenoise" , "OpenImageDenoise_core", "OpenImageDenoise_utils" }
             end
@@ -301,12 +297,12 @@ function editor_project_configuration()
 
         -- Includes
         includedirs { RUNTIME_DIR }
-        includedirs { RUNTIME_DIR .. "/Core" }     -- This is here because the runtime uses it
+        includedirs { RUNTIME_DIR .. "/Core" }         -- This is here because the runtime uses it
         if os.target() == "windows" then
             includedirs { "../third_party/free_type" } -- Used to rasterise the ImGui font atlas
-            includedirs { "../third_party/sdl/sdl" }  	   -- SDL, used by ImGui to create windows
+            includedirs { "../third_party/sdl" }       -- SDL, used by ImGui to create windows
         else
-            includedirs { "/usr/include/SDL2" }
+            includedirs { "/usr/include/SDL3" }
             includedirs { "/usr/include/freetype2" }
         end
 
@@ -319,7 +315,7 @@ function editor_project_configuration()
             targetdir (TARGET_DIR)
             debugdir (TARGET_DIR)
             links { "freetype" }
-            links { "SDL2" }
+            links { "SDL3" }
 
         -- "Debug"
         filter "configurations:debug"
@@ -328,10 +324,10 @@ function editor_project_configuration()
             debugdir (TARGET_DIR)
             if os.target() == "windows" then
                 links { "freetype_debug" }
-                links { "SDL2_debug" }
+                links { "SDL3_debug" }
             else
                 links { "freetype" }
-                links { "SDL2" }
+                links { "SDL3" }
             end
 end
 

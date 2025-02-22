@@ -50,9 +50,9 @@ namespace spartan
     {
         uint32_t used = 0;
 
-        string to_string()
+        string to_string(uint32_t version)
         {
-            return std::to_string(VK_VERSION_MAJOR(used)) + "." + std::to_string(VK_VERSION_MINOR(used)) + "." + std::to_string(VK_VERSION_PATCH(used));
+            return std::to_string(VK_VERSION_MAJOR(version)) + "." + std::to_string(VK_VERSION_MINOR(version)) + "." + std::to_string(VK_VERSION_PATCH(version));
         }
     }
 
@@ -152,17 +152,16 @@ namespace spartan
 
                 // save the api version we ended up using
                 version::used                = app_info.apiVersion;
-                RHI_Context::api_version_str = version::to_string();
+                RHI_Context::api_version_str = version::to_string(version::used);
 
                 // some checks
                 {
                     // if the driver hasn't been updated to the latest SDK, log a warning
                     if (sdk_version > driver_version)
                     {
-                        string version_driver = to_string(VK_API_VERSION_MAJOR(driver_version)) + "." + to_string(VK_API_VERSION_MINOR(driver_version)) + "." + to_string(VK_API_VERSION_PATCH(driver_version));
-                        string version_sdk    = to_string(VK_API_VERSION_MAJOR(sdk_version))    + "." + to_string(VK_API_VERSION_MINOR(sdk_version)) + "." + to_string(VK_API_VERSION_PATCH(sdk_version));
+                        string version_driver = version::to_string(driver_version);
+                        string version_sdk    = version::to_string(sdk_version);
                         SP_LOG_WARNING("Using Vulkan %s, update drivers or wait for GPU vendor to support Vulkan %s, engine may still work", version_driver.c_str(), version_sdk.c_str());
-
                     }
 
                     // ensure that the machine supports Vulkan 1.4 (as we are using extensions from it)
@@ -172,7 +171,7 @@ namespace spartan
                     uint32_t min_minor    = VK_API_VERSION_MINOR(VK_API_VERSION_1_4);
                     if (driver_major < min_major || (driver_major == min_major && driver_minor < min_minor))
                     { 
-                        SP_ERROR_WINDOW("Your machine doesn't support Vulkan 1.4");
+                        SP_ERROR_WINDOW("Your GPU doesn't support Vulkan 1.4. Ensure you have the latest drivers.");
                     }
                 }
             }
@@ -242,7 +241,7 @@ namespace spartan
             "VK_EXT_hdr_metadata",            
             "VK_EXT_robustness2",             
             "VK_KHR_external_memory",         // to share images with Intel Open Image Denoise
-            #if defined(_MSC_VER)             
+            #if defined(_WIN32)
             "VK_KHR_external_memory_win32",   // external memory handle type, linux alternative: VK_KHR_external_memory_fd
             #endif
             "VK_KHR_synchronization2",        // this is part of Vulkan 1.4 but AMD FidelityFX Breadcrumbs without it (they fetch device pointers from some table)
@@ -675,7 +674,7 @@ namespace spartan
                 vector<VkExternalMemoryHandleTypeFlags> external_memory_handle_types;
                 VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
                 vkGetPhysicalDeviceMemoryProperties(RHI_Context::device_physical, &physical_device_memory_properties);
-                #if defined(_MSC_VER)
+                #if defined(_WIN32)
                 external_memory_handle_types.resize(physical_device_memory_properties.memoryTypeCount, VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR);
                 #else
                 SP_LOG_ERROR("Not implemented, you need to use the Linux equivalent via VK_KHR_external_memory_fd");
@@ -757,6 +756,32 @@ namespace spartan
         unordered_map<uint64_t, shared_ptr<RHI_DescriptorSetLayout>> layouts;
         unordered_map<uint64_t, shared_ptr<RHI_Pipeline>> pipelines;
         unordered_map<uint64_t, vector<RHI_Descriptor>> descriptor_cache;
+
+        void create_pool()
+        {
+            static array<VkDescriptorPoolSize, 5> pool_sizes =
+            {
+                VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_SAMPLER,                rhi_max_array_size * rhi_max_descriptor_set_count },
+                VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          rhi_max_array_size * rhi_max_descriptor_set_count },
+                VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          rhi_max_array_size * rhi_max_descriptor_set_count },
+                VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, rhi_max_array_size * rhi_max_descriptor_set_count },
+                VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, rhi_max_array_size * rhi_max_descriptor_set_count }
+            };
+
+            // describe
+            VkDescriptorPoolCreateInfo pool_create_info = {};
+            pool_create_info.sType                      = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            pool_create_info.flags                      = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
+            pool_create_info.poolSizeCount              = static_cast<uint32_t>(pool_sizes.size());
+            pool_create_info.pPoolSizes                 = pool_sizes.data();
+            pool_create_info.maxSets                    = rhi_max_descriptor_set_count;
+
+            // create
+            SP_ASSERT(descriptors::descriptor_pool == nullptr);
+            SP_ASSERT_VK(vkCreateDescriptorPool(RHI_Context::device, &pool_create_info, nullptr, &descriptors::descriptor_pool));
+
+            Profiler::m_descriptor_set_count = 0;
+        }
 
         void merge_descriptors(vector<RHI_Descriptor>& base_descriptors, const std::vector<RHI_Descriptor>& additional_descriptors)
         {
@@ -1097,12 +1122,19 @@ namespace spartan
             // check if certain features are supported and enable them
             {
                 // variable shading rate
-                *is_shading_rate_supported = support_vrs.attachmentFragmentShadingRate == VK_TRUE;
-                if (*is_shading_rate_supported)
-                {
-                    // Enable this feature conditionally (no assert) as older GPUs like NV 1080 and Radeon RX Vega do not support it.
-                    // Support details: https://vulkan.gpuinfo.org/listdevicescoverage.php?platform=windows&extension=VK_KHR_fragment_shading_rate
-                    features_vrs.attachmentFragmentShadingRate = VK_TRUE;
+                if (is_shading_rate_supported)
+                { 
+                    *is_shading_rate_supported = support_vrs.attachmentFragmentShadingRate == VK_TRUE;
+                    if (*is_shading_rate_supported)
+                    {
+                        // enable this feature conditionally (no assert) as older GPUs like NV 1080 and Radeon RX Vega do not support it.
+                        // support details: https://vulkan.gpuinfo.org/listdevicescoverage.php?platform=windows&extension=VK_KHR_fragment_shading_rate
+                        features_vrs.attachmentFragmentShadingRate = VK_TRUE;
+                    }
+                    else
+                    {
+                        features_robustness.pNext = nullptr; // remove VRS from the chain
+                    }
                 }
 
                 // misc
@@ -1223,6 +1255,82 @@ namespace spartan
         }
     }
 
+    namespace device_physical
+    {
+        void detect_all()
+        {
+            uint32_t device_count = 0;
+            if (vkEnumeratePhysicalDevices(RHI_Context::instance, &device_count, nullptr) != VK_SUCCESS)
+            {
+                SP_ERROR_WINDOW("Ensure you're not using incorrect or experimental drivers. Update your graphics drivers and uninstall Vulkan 'Compatibility Packs'.");
+            }
+
+            SP_ASSERT_MSG(device_count != 0, "There are no available physical devices");
+            
+            vector<VkPhysicalDevice> physical_devices(device_count);
+            SP_ASSERT_MSG(
+                vkEnumeratePhysicalDevices(RHI_Context::instance, &device_count, physical_devices.data()) == VK_SUCCESS,
+                "Failed to enumerate physical devices"
+            );
+            
+            // register all available physical devices
+            for (const VkPhysicalDevice& device_physical : physical_devices)
+            {
+                VkPhysicalDeviceProperties device_properties = {};
+                vkGetPhysicalDeviceProperties(device_physical, &device_properties);
+            
+                VkPhysicalDeviceMemoryProperties device_memory_properties = {};
+                vkGetPhysicalDeviceMemoryProperties(device_physical, &device_memory_properties);
+            
+                RHI_PhysicalDevice_Type type = RHI_PhysicalDevice_Type::Max;
+                if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) type = RHI_PhysicalDevice_Type::Integrated;
+                if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)   type = RHI_PhysicalDevice_Type::Discrete;
+                if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU)    type = RHI_PhysicalDevice_Type::Virtual;
+                if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)            type = RHI_PhysicalDevice_Type::Cpu;
+
+                // find the local device memory heap size
+                uint64_t vram_size_bytes = 0;
+                for (uint32_t i = 0; i < device_memory_properties.memoryHeapCount; i++)
+                {
+                    if (device_memory_properties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
+                    {
+                        vram_size_bytes = device_memory_properties.memoryHeaps[i].size;
+                        break;
+                    }
+                }
+                SP_ASSERT(vram_size_bytes > 0);
+
+                RHI_Device::PhysicalDeviceRegister(PhysicalDevice
+                (
+                    device_properties.apiVersion,          // api version
+                    device_properties.driverVersion,       // driver version
+                    device_properties.vendorID,            // vendor id
+                    type,                                  // type
+                    &device_properties.deviceName[0],      // name
+                    vram_size_bytes,                       // memory
+                    static_cast<void*>(device_physical)    // data
+                ));
+            }
+        }
+
+        void select_primary()
+        {
+            // go through all the devices (sorted from best to worst based on their properties)
+            for (uint32_t device_index = 0; device_index < RHI_Device::PhysicalDeviceGet().size(); device_index++)
+            {
+                VkPhysicalDevice device = static_cast<VkPhysicalDevice>(RHI_Device::PhysicalDeviceGet()[device_index].GetData());
+
+                // get the first device which supports graphics, compute and transfer queues
+                if (queues::get_queue_family_indices(device))
+                {
+                    RHI_Device::PhysicalDeviceSetPrimary(device_index);
+                    RHI_Context::device_physical = device;
+                    break;
+                }
+            }
+        }
+    }
+
     void RHI_Device::Initialize()
     {
         // instance
@@ -1260,11 +1368,11 @@ namespace spartan
 
         // device
         {
-            // detect physical devices amd select the primary one
-            PhysicalDeviceDetect();
-            PhysicalDeviceSelectPrimary();
+            // detect and select primary
+            device_physical::detect_all();
+            device_physical::select_primary();
 
-            // queue create info
+            // queues
             vector<VkDeviceQueueCreateInfo> queue_create_infos;
             {
                 queues::detect_queue_family_indices(RHI_Context::device_physical);
@@ -1288,7 +1396,7 @@ namespace spartan
                 }
             }
 
-            // detect device properties
+            // properties
             {
                 VkPhysicalDeviceFragmentShadingRatePropertiesKHR shading_rate_properties = {};
                 shading_rate_properties.sType                                            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR;
@@ -1338,7 +1446,7 @@ namespace spartan
                 create_info.ppEnabledExtensionNames      = extensions_supported.data();
 
                 SP_ASSERT_VK(vkCreateDevice(RHI_Context::device_physical, &create_info, nullptr, &RHI_Context::device));
-                SP_LOG_INFO("Vulkan %s", version::to_string().c_str());
+                SP_LOG_INFO("Vulkan %s", version::to_string(version::used).c_str());
             }
         }
 
@@ -1363,7 +1471,7 @@ namespace spartan
         }
 
         vulkan_memory_allocator::initialize();
-        CreateDescriptorPool();
+        descriptors::create_pool();
 
         // gpu dependent actions
         {
@@ -1372,7 +1480,7 @@ namespace spartan
                 SP_ASSERT_MSG(GetPrimaryPhysicalDevice()->IsAmd(), "Breadcrumbs are only supported on AMD GPUs");
             }
 
-            if (RHI_Device::GetPrimaryPhysicalDevice()->IsBelowMinimumRequirments())
+            if (RHI_Device::GetPrimaryPhysicalDevice()->IsBelowMinimumRequirements())
             {
                 SP_WARNING_WINDOW("The GPU does not meet the minimum requirements for running the engine. The engine may not function correctly.");
             }
@@ -1428,81 +1536,6 @@ namespace spartan
         // device and instance
         vkDestroyDevice(RHI_Context::device, nullptr);
         vkDestroyInstance(RHI_Context::instance, nullptr);
-    }
-
-    // physical device
-
-    void RHI_Device::PhysicalDeviceDetect()
-    {
-        uint32_t device_count = 0;
-        if (vkEnumeratePhysicalDevices(RHI_Context::instance, &device_count, nullptr) != VK_SUCCESS)
-        {
-            SP_ERROR_WINDOW("Ensure you're not using incorrect or experimental drivers. Update your graphics drivers and uninstall Vulkan 'Compatibility Packs'.");
-        }
-
-        SP_ASSERT_MSG(device_count != 0, "There are no available physical devices");
-        
-        vector<VkPhysicalDevice> physical_devices(device_count);
-        SP_ASSERT_MSG(
-            vkEnumeratePhysicalDevices(RHI_Context::instance, &device_count, physical_devices.data()) == VK_SUCCESS,
-            "Failed to enumerate physical devices"
-        );
-        
-        // register all available physical devices
-        for (const VkPhysicalDevice& device_physical : physical_devices)
-        {
-            VkPhysicalDeviceProperties device_properties = {};
-            vkGetPhysicalDeviceProperties(device_physical, &device_properties);
-        
-            VkPhysicalDeviceMemoryProperties device_memory_properties = {};
-            vkGetPhysicalDeviceMemoryProperties(device_physical, &device_memory_properties);
-        
-            RHI_PhysicalDevice_Type type = RHI_PhysicalDevice_Type::Max;
-            if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) type = RHI_PhysicalDevice_Type::Integrated;
-            if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)   type = RHI_PhysicalDevice_Type::Discrete;
-            if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU)    type = RHI_PhysicalDevice_Type::Virtual;
-            if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)            type = RHI_PhysicalDevice_Type::Cpu;
-
-            // find the local device memory heap size
-            uint64_t vram_size_bytes = 0;
-            for (uint32_t i = 0; i < device_memory_properties.memoryHeapCount; i++)
-            {
-                if (device_memory_properties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
-                {
-                    vram_size_bytes = device_memory_properties.memoryHeaps[i].size;
-                    break;
-                }
-            }
-            SP_ASSERT(vram_size_bytes > 0);
-
-            PhysicalDeviceRegister(PhysicalDevice
-            (
-                device_properties.apiVersion,          // api version
-                device_properties.driverVersion,       // driver version
-                device_properties.vendorID,            // vendor id
-                type,                                  // type
-                &device_properties.deviceName[0],      // name
-                vram_size_bytes,                       // memory
-                static_cast<void*>(device_physical)    // data
-            ));
-        }
-    }
-
-    void RHI_Device::PhysicalDeviceSelectPrimary()
-    {
-        // go through all the devices (sorted from best to worst based on their properties)
-        for (uint32_t device_index = 0; device_index < PhysicalDeviceGet().size(); device_index++)
-        {
-            VkPhysicalDevice device = static_cast<VkPhysicalDevice>(PhysicalDeviceGet()[device_index].GetData());
-
-            // get the first device which supports graphics, compute and transfer queues
-            if (queues::get_queue_family_indices(device))
-            {
-                PhysicalDeviceSetPrimary(device_index);
-                RHI_Context::device_physical = device;
-                break;
-            }
-        }
     }
 
     // queues
@@ -1572,7 +1605,7 @@ namespace spartan
     void RHI_Device::DeletionQueueParse()
     {
         lock_guard<mutex> guard(mutex_deletion_queue);
-       
+
         for (auto& it : deletion_queue)
         {
             RHI_Resource_Type resource_type = it.first;
@@ -1598,7 +1631,7 @@ namespace spartan
                 }
 
                 // delete descriptor sets which are now invalid (because they are referring to a deleted resource)
-                if (resource_type == RHI_Resource_Type::TextureView || resource_type == RHI_Resource_Type::Buffer || resource_type == RHI_Resource_Type::Sampler)
+                if (resource_type == RHI_Resource_Type::TextureView || resource_type == RHI_Resource_Type::Buffer)
                 {
                     for (auto it = descriptors::sets.begin(); it != descriptors::sets.end();)
                     {
@@ -1614,6 +1647,8 @@ namespace spartan
                         }
                     }
                 }
+
+                // samplers are bindless so they just update the set again
             }
         }
 
@@ -1658,32 +1693,6 @@ namespace spartan
     }
 
     // descriptors
-
-    void RHI_Device::CreateDescriptorPool()
-    {
-        static array<VkDescriptorPoolSize, 5> pool_sizes =
-        {
-            VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_SAMPLER,                rhi_max_array_size * rhi_max_descriptor_set_count },
-            VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          rhi_max_array_size * rhi_max_descriptor_set_count },
-            VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          rhi_max_array_size * rhi_max_descriptor_set_count },
-            VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, rhi_max_array_size * rhi_max_descriptor_set_count },
-            VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, rhi_max_array_size * rhi_max_descriptor_set_count }
-        };
-
-        // describe
-        VkDescriptorPoolCreateInfo pool_create_info = {};
-        pool_create_info.sType                      = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        pool_create_info.flags                      = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
-        pool_create_info.poolSizeCount              = static_cast<uint32_t>(pool_sizes.size());
-        pool_create_info.pPoolSizes                 = pool_sizes.data();
-        pool_create_info.maxSets                    = rhi_max_descriptor_set_count;
-
-        // create
-        SP_ASSERT(descriptors::descriptor_pool == nullptr);
-        SP_ASSERT_VK(vkCreateDescriptorPool(RHI_Context::device, &pool_create_info, nullptr, &descriptors::descriptor_pool));
-
-        Profiler::m_descriptor_set_count = 0;
-    }
 
     void RHI_Device::AllocateDescriptorSet(void*& resource, RHI_DescriptorSetLayout* descriptor_set_layout, const vector<RHI_Descriptor>& descriptors_)
     {
@@ -1741,7 +1750,7 @@ namespace spartan
         array<RHI_Texture*, rhi_max_array_size>* material_textures,
         RHI_Buffer* material_parameters,
         RHI_Buffer* light_parameters,
-        const std::array<std::shared_ptr<RHI_Sampler>, static_cast<uint32_t>(Renderer_Sampler::Max)>* samplers
+        const array<shared_ptr<RHI_Sampler>, static_cast<uint32_t>(Renderer_Sampler::Max)>* samplers
     )
     {
         if (samplers)
@@ -1901,7 +1910,7 @@ namespace spartan
         // external memory (if needed)
         VkExternalMemoryImageCreateInfo external_memory_image_create_info = {};
         external_memory_image_create_info.sType       = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
-        #if defined(_MSC_VER)
+        #if defined(_WIN32)
         external_memory_image_create_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
         #else
         external_memory_image_create_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR;
@@ -1990,7 +1999,7 @@ namespace spartan
         // get external memory handle
         if (texture->HasExternalMemory())
         {
-            #if defined(_MSC_VER)
+            #if defined(_WIN32)
             VkMemoryGetWin32HandleInfoKHR get_handle_info = {};
             get_handle_info.sType                         = VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR;
             get_handle_info.memory                        = allocation_info.deviceMemory;
@@ -2146,9 +2155,9 @@ namespace spartan
 
     // misc
 
-    void RHI_Device::SetResourceName(void* resource, const RHI_Resource_Type resource_type, const std::string name)
+    void RHI_Device::SetResourceName(void* resource, const RHI_Resource_Type resource_type, const string name)
     {
-        if (Debugging::IsValidationLayerEnabled()) // function pointers are not initialized if validation disabled 
+        if (Debugging::IsValidationLayerEnabled()) // function pointers are not initialized if validation disabled
         {
             SP_ASSERT(resource != nullptr);
             SP_ASSERT(functions::set_object_name != nullptr);

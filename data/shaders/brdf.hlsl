@@ -24,43 +24,48 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //====================
 
 /*------------------------------------------------------------------------------
-    Fresnel, visibility and normal distribution functions
+    Diffuse
 ------------------------------------------------------------------------------*/
 
-float3 F_Schlick(const float3 f0, float f90, float v_dot_h)
+float3 Diffuse_Disney(float3 diffuse_color, float roughness, float NoV, float NoL, float VoH)
 {
-    // Schlick 1994, "An Inexpensive BRDF Model for Physically-Based Rendering"
+    float FD90 = 0.5 + 2 * VoH * VoH * roughness;
+    float FdV  = 1 + (FD90 - 1) * pow(1 - NoV, 5);
+    float FdL  = 1 + (FD90 - 1) * pow(1 - NoL, 5);
+    return diffuse_color * ((1 / PI) * FdV * FdL);
+}
+
+float3 BRDF_Diffuse(Surface surface, AngularInfo angular_info)
+{
+    return Diffuse_Disney(
+        surface.albedo,       // diffuse_color
+        surface.roughness,    // roughness
+        angular_info.n_dot_v, // NoV
+        angular_info.n_dot_l, // NoL
+        angular_info.v_dot_h  // VoH
+    );
+}
+
+/*------------------------------------------------------------------------------
+    Specular
+------------------------------------------------------------------------------*/
+
+float3 F_Schlick(const float3 f0, float3 f90, float v_dot_h)
+{
     return f0 + (f90 - f0) * pow(1.0 - v_dot_h, 5.0);
 }
 
-float3 F_Schlick(const float3 f0, float v_dot_h)
+float3 get_f90(Surface surface)
 {
-    float f = pow(1.0 - v_dot_h, 5.0);
-    return f + f0 * (1.0 - f);
+    return lerp(1.0f, surface.F0, surface.metallic);
 }
 
-float3 F_Schlick_Roughness(float3 f0, float cosTheta, float roughness)
+float V_SmithGGX(float n_dot_v, float n_dot_l, float alpha2)
 {
-    float3 a = 1.0 - roughness;
-    return f0 + (max(a, f0) - f0) * pow(max(1.0 - cosTheta, 0.0), 5.0);
-}
+    float lambdaV = n_dot_l * sqrt(n_dot_v * (n_dot_v - n_dot_v * alpha2) + alpha2);
+    float lambdaL = n_dot_v * sqrt(n_dot_l * (n_dot_l - n_dot_l * alpha2) + alpha2);
 
-// Smith term for GGX
-// [Smith 1967, "Geometrical shadowing of a random rough surface"]
-inline float V_Smith(float a2, float n_dot_v, float n_dot_l)
-{
-    float Vis_SmithV = n_dot_v + sqrt(n_dot_v * (n_dot_v - n_dot_v * a2) + a2);
-    float Vis_SmithL = n_dot_l + sqrt(n_dot_l * (n_dot_l - n_dot_l * a2) + a2);
-    return rcp(Vis_SmithV * Vis_SmithL);
-}
-
-// Appoximation of joint Smith term for GGX
-// [Heitz 2014, "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs"]
-inline float V_SmithJointApprox(float a, float n_dot_v, float n_dot_l)
-{
-    float Vis_SmithV = n_dot_l * (n_dot_v * (1 - a) + a);
-    float Vis_SmithL = n_dot_v * (n_dot_l * (1 - a) + a);
-    return saturate_16(0.5 * rcp(Vis_SmithV + Vis_SmithL));
+    return 0.5 / max(lambdaV + lambdaL, 1e-5);
 }
 
 float V_GGX_anisotropic_2cos(float cos_theta_m, float alpha_x, float alpha_y, float cos_phi, float sin_phi)
@@ -123,56 +128,29 @@ float D_Charlie(float roughness, float NoH)
     return (2.0 + invAlpha) * pow(sin2h, invAlpha * 0.5) / (2.0 * PI);
 }
 
-/*------------------------------------------------------------------------------
-    Diffuse
-------------------------------------------------------------------------------*/
-
-float3 Diffuse_Lambert(float3 diffuse_color)
+float3 compute_diffuse_energy(float3 F, float metallic)
 {
-    return diffuse_color * (1 / PI);
-}
+    // used to tone down diffuse such that only non-metals have it
+    
+    float3 kS  = F;               // the energy of light that gets reflected - equal to fresnel
+    float3 kD  = 1.0f - kS;       // remaining energy, light that gets refracted
+    kD        *= 1.0f - metallic; // multiply kD by the inverse metalness such that only non-metals have diffuse lighting
 
-// [Burley 2012, "Physically-Based Shading at Disney"]
-float3 Diffuse_Burley(float3 diffuse_color, float Roughness, float NoV, float NoL, float VoH)
-{
-    float FD90 = 0.5 + 2 * VoH * VoH * Roughness;
-    float FdV = 1 + (FD90 - 1) * pow(1 - NoV, 5);
-    float FdL = 1 + (FD90 - 1) * pow(1 - NoL, 5);
-    return diffuse_color * ( (1 / PI) * FdV * FdL );
+    return kD;
 }
-
-// Diffuse - [Gotanda 2012, "Beyond a Simple Physically Based Blinn-Phong Model in Real-Time"]
-float3 Diffuse_OrenNayar(Surface surface, AngularInfo angular_info)
-{
-    float s     = surface.roughness_alpha; // ( 1.29 + 0.5 * a );
-    float s2    = s * s;
-    float VoL   = 2 * angular_info.v_dot_h * angular_info.v_dot_h - 1;       // double angle identity
-    float Cosri = VoL - angular_info.n_dot_v * angular_info.n_dot_l;
-    float C1    = 1 - 0.5 * s2 / (s2 + 0.33);
-    float C2    = 0.45 * s2 / (s2 + 0.09) * Cosri * ( Cosri >= 0 ? rcp( max(angular_info.n_dot_l, angular_info.n_dot_v + 0.0001f ) ) : 1 );
-    return surface.albedo / PI * ( C1 + C2 ) * ( 1 + surface.roughness * 0.5 );
-}
-
-float3 BRDF_Diffuse(Surface surface, AngularInfo angular_info)
-{
-    return Diffuse_OrenNayar(surface, angular_info);
-}
-
-/*------------------------------------------------------------------------------
-    Specular
-------------------------------------------------------------------------------*/
 
 float3 BRDF_Specular_Isotropic(inout Surface surface, AngularInfo angular_info)
 {
-    float alpha_ggx = D_GGX_Alpha(surface.roughness);
-    float  V        = V_SmithJointApprox(surface.roughness_alpha, angular_info.n_dot_v, angular_info.n_dot_l);
-    float  D        = D_GGX(angular_info.n_dot_h, alpha_ggx * alpha_ggx);
-    float3 F        = F_Schlick(surface.F0, angular_info.v_dot_h);
+    float alpha_ggx     = D_GGX_Alpha(surface.roughness);
+    float  visibility   = V_SmithGGX(angular_info.n_dot_v, angular_info.n_dot_l, surface.alpha * surface.alpha);
+    float  distribution = D_GGX(angular_info.n_dot_h, alpha_ggx * alpha_ggx);
+    float3 fresnel      = F_Schlick(surface.F0, get_f90(surface), angular_info.v_dot_h);
 
-    surface.diffuse_energy  *= compute_diffuse_energy(F, surface.metallic);
-    surface.specular_energy *= F;
+    // energy conservation
+    surface.diffuse_energy  *= compute_diffuse_energy(fresnel, surface.metallic);
+    surface.specular_energy *= fresnel;
 
-    return D * V * F;
+    return visibility * distribution * fresnel;
 }
 
 float3 BRDF_Specular_Anisotropic(inout Surface surface, AngularInfo angular_info)
@@ -196,10 +174,9 @@ float3 BRDF_Specular_Anisotropic(inout Surface surface, AngularInfo angular_info
     float YdotH     = dot(b, angular_info.h);
     
     // specular anisotropic BRDF
-    float D   = D_GGX_Anisotropic(angular_info.n_dot_h, ax, ay, XdotH, YdotH);
-    float V   = V_GGX_anisotropic_2cos(angular_info.n_dot_v, ax, ay, XdotH, YdotH) * V_GGX_anisotropic_2cos(angular_info.n_dot_v, ax, ay, XdotH, YdotH);
-    float f90 = saturate(dot(surface.F0, 50.0 * 0.33));
-    float3 F  = F_Schlick(surface.F0, f90, angular_info.l_dot_h);
+    float D  = D_GGX_Anisotropic(angular_info.n_dot_h, ax, ay, XdotH, YdotH);
+    float V  = V_GGX_anisotropic_2cos(angular_info.n_dot_v, ax, ay, XdotH, YdotH) * V_GGX_anisotropic_2cos(angular_info.n_dot_v, ax, ay, XdotH, YdotH);
+    float3 F = F_Schlick(surface.F0, get_f90(surface), angular_info.l_dot_h);
 
     surface.diffuse_energy  *= compute_diffuse_energy(F, surface.metallic);
     surface.specular_energy *= F;
@@ -214,7 +191,7 @@ float3 BRDF_Specular_Clearcoat(inout Surface surface, AngularInfo angular_info)
     
     float D  = D_GGX(angular_info.n_dot_h, roughness_alpha_squared);
     float V  = V_Kelemen(angular_info.v_dot_h);
-    float3 F = F_Schlick(0.04, 1.0, angular_info.v_dot_h) * surface.clearcoat;
+    float3 F = F_Schlick(0.04, get_f90(surface), angular_info.v_dot_h) * surface.clearcoat;
 
     surface.diffuse_energy  *= compute_diffuse_energy(F, surface.metallic);
     surface.specular_energy *= F;
@@ -224,16 +201,20 @@ float3 BRDF_Specular_Clearcoat(inout Surface surface, AngularInfo angular_info)
 
 float3 BRDF_Specular_Sheen(inout Surface surface, AngularInfo angular_info)
 {
-    // mix between white and using base color for sheen reflection
-    float3 tint = surface.sheen_tint * surface.sheen_tint;
-    float3 f0   = lerp(1.0f, surface.F0, tint);
-    
-    float D  = D_Charlie(surface.roughness, angular_info.n_dot_h);
-    float V  = V_Neubelt(angular_info.n_dot_v, angular_info.n_dot_l);
-    float3 F = f0 * surface.sheen;
+    // charlie distribution for sheen
+    float D = D_Charlie(surface.roughness, angular_info.n_dot_h);
 
+    // sheen visibility term (simplified, can be adjusted based on needs)
+    float V = V_Neubelt(angular_info.n_dot_v, angular_info.n_dot_l);
+
+    // sheen fresnel term (simple Schlick approximation)
+    float3 sheen_color = saturate(surface.albedo * 1.2f);
+    float3 F           = F_Schlick(sheen_color, 1.0, angular_info.v_dot_h);
+
+    // sheen energy conservation
     surface.diffuse_energy  *= compute_diffuse_energy(F, surface.metallic);
     surface.specular_energy *= F;
 
+    // combine terms to get the sheen BRDF
     return D * V * F;
 }

@@ -19,7 +19,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-//= INCLUDES =================================
+//= INCLUDES ===============================
 #include "pch.h"
 #include "Game.h"
 #include "../Game/Car.h"
@@ -28,7 +28,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../World/Components/Camera.h"
 #include "../World/Components/Light.h"
 #include "../World/Components/PhysicsBody.h"
-#include "../World/Components/AudioListener.h"
 #include "../World/Components/AudioSource.h"
 #include "../World/Components/Terrain.h"
 #include "../Core/ThreadPool.h"
@@ -38,7 +37,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../Rendering/Material.h"
 #include "../Resource/ResourceCache.h"
 #include "../Input/Input.h"
-//============================================
+#include "../Geometry/GeometryGeneration.h"
+//==========================================
 
 //= NAMESPACES ===============
 using namespace std;
@@ -55,8 +55,9 @@ namespace spartan
         shared_ptr<Entity> m_default_physics_body_camera = nullptr;
         shared_ptr<Entity> m_default_environment         = nullptr;
         shared_ptr<Entity> m_default_light_directional   = nullptr;
+        shared_ptr<Mesh>   m_default_grass_patch         = nullptr;
 
-        void create_music(const char* soundtrack_file_path = "project\\music\\jake_chudnow_shona.mp3")
+        void create_music(const char* soundtrack_file_path = "project\\music\\jake_chudnow_shona.wav")
         {
             if (!soundtrack_file_path)
                 return;
@@ -113,8 +114,8 @@ namespace spartan
             
             // add a physics body so that the camera can move through the environment in a physical manner
             PhysicsBody* physics_body = m_default_physics_body_camera->AddComponent<PhysicsBody>().get();
+            physics_body->SetBoundingBox(Vector3(0.45f, 1.8f, 0.25f)); // average european male
             physics_body->SetMass(82.0f);
-            physics_body->SetBoundingBox(Vector3(0.5f, 1.8f, 0.5f));
             physics_body->SetShapeType(PhysicsShape::Capsule);
             physics_body->SetRotationLock(true);
             
@@ -122,7 +123,6 @@ namespace spartan
             shared_ptr<Entity> camera = World::CreateEntity();
             camera->SetObjectName("component_camera");
             camera->AddComponent<Camera>()->SetPhysicsBodyToControl(physics_body);
-            camera->AddComponent<AudioListener>();
             camera->SetParent(m_default_physics_body_camera);
             camera->SetPositionLocal(Vector3(0.0f, 1.8f, 0.0f)); // place it at the top of the capsule
             camera->SetRotation(Quaternion::FromEulerAngles(camera_rotation));
@@ -132,8 +132,12 @@ namespace spartan
         {
             const float car_scale   = 0.0180f;
             const float wheel_scale = 0.3f;
+
+            // load full detail model (no vertex/index optimisations)
+            uint32_t mesh_flags = Mesh::GetDefaultFlags();
+            mesh_flags &= ~static_cast<uint32_t>(MeshFlags::PostProcessOptimize); 
             
-            if (shared_ptr<Mesh> mesh_car = ResourceCache::Load<Mesh>("project\\models\\toyota_ae86_sprinter_trueno_zenki\\scene.gltf"))
+            if (shared_ptr<Mesh> mesh_car = ResourceCache::Load<Mesh>("project\\models\\toyota_ae86_sprinter_trueno_zenki\\scene.gltf", mesh_flags))
             {
                 shared_ptr<Entity> entity_car = mesh_car->GetRootEntity().lock();
                 entity_car->SetObjectName("geometry");
@@ -345,7 +349,7 @@ namespace spartan
                     sound->SetParent(m_default_car);
 
                     shared_ptr<AudioSource> audio_source = sound->AddComponent<AudioSource>();
-                    audio_source->SetAudioClip("project\\music\\car_start.mp3");
+                    audio_source->SetAudioClip("project\\music\\car_start.wav");
                     audio_source->SetLoop(false);
                     audio_source->SetPlayOnStart(false);
                 }
@@ -357,7 +361,7 @@ namespace spartan
                     sound->SetParent(m_default_car);
 
                     shared_ptr<AudioSource> audio_source = sound->AddComponent<AudioSource>();
-                    audio_source->SetAudioClip("project\\music\\car_idle.mp3");
+                    audio_source->SetAudioClip("project\\music\\car_idle.wav");
                     audio_source->SetLoop(true);
                     audio_source->SetPlayOnStart(false);
                 }
@@ -465,12 +469,11 @@ namespace spartan
 
         void create_forest_car()
         {
-            create_sun(LightIntensity::sky_sunlight_morning_evening);
-            create_camera(Vector3(-219.7978f, 6.0f, 19.8168f), Vector3(4.0106f, -138.3613f, 0.0f));
-            create_car(Vector3(-226.4939f, 3.4f, 9.9775f));
+            create_sun(LightIntensity::sky_overcast_day);
+            create_camera(Vector3(-458.0084f, 8.0f, 371.9392f), Vector3(0.0f, 0.0f, 0.0f));
+            create_car(Vector3(-449.0260f, 6.0696f, 359.2632f));
 
             // mood adjustment
-            m_default_light_directional->GetComponent<Light>()->SetTemperature(2300.0f);
             m_default_light_directional->GetComponent<Light>()->SetFlag(LightFlags::Volumetric, false);
             Renderer::SetOption(Renderer_Option::Grid, 0.0f);
 
@@ -491,7 +494,7 @@ namespace spartan
                     sound->SetParent(entity);
 
                     shared_ptr<AudioSource> audio_source = sound->AddComponent<AudioSource>();
-                    audio_source->SetAudioClip("project\\music\\footsteps_grass.mp3");
+                    audio_source->SetAudioClip("project\\music\\footsteps_grass.wav");
                     audio_source->SetPlayOnStart(false);
                 }
 
@@ -502,7 +505,7 @@ namespace spartan
                     sound->SetParent(entity);
 
                     shared_ptr<AudioSource> audio_source = sound->AddComponent<AudioSource>();
-                    audio_source->SetAudioClip("project\\music\\forest_river.mp3");
+                    audio_source->SetAudioClip("project\\music\\forest_river.wav");
                     audio_source->SetLoop(true);
                 }
 
@@ -513,7 +516,7 @@ namespace spartan
                     sound->SetParent(entity);
 
                     shared_ptr<AudioSource> audio_source = sound->AddComponent<AudioSource>();
-                    audio_source->SetAudioClip("project\\music\\wind.mp3");
+                    audio_source->SetAudioClip("project\\music\\wind.wav");
                     audio_source->SetLoop(true);
                 }
 
@@ -524,7 +527,7 @@ namespace spartan
                     sound->SetParent(entity);
 
                     shared_ptr<AudioSource> audio_source = sound->AddComponent<AudioSource>();
-                    audio_source->SetAudioClip("project\\music\\underwater.mp3");
+                    audio_source->SetAudioClip("project\\music\\underwater.wav");
                     audio_source->SetPlayOnStart(false);
                 }
             }
@@ -577,7 +580,7 @@ namespace spartan
                         shared_ptr<Entity> water = World::CreateEntity();
                         water->SetObjectName("water");
                         water->SetPosition(Vector3(0.0f, 0.0f, 0.0f));
-                        water->SetScale(Vector3(1024.0f, 1.0f, 1024.0f));
+                        water->SetScale(Vector3(4096.0f, 1.0f, 4096.0f));
 
                         Renderable* renderable = water->AddComponent<Renderable>().get();
                         renderable->SetGeometry(MeshType::Grid);
@@ -592,8 +595,8 @@ namespace spartan
                             material->SetProperty(MaterialProperty::Ior,                Material::EnumToIor(MaterialIor::Water));
                             material->SetProperty(MaterialProperty::Roughness,          0.0f);
                             material->SetProperty(MaterialProperty::Normal,             0.1f);
-                            material->SetProperty(MaterialProperty::TextureTilingX,     200.0f);
-                            material->SetProperty(MaterialProperty::TextureTilingY,     200.0f);
+                            material->SetProperty(MaterialProperty::TextureTilingX,     800.0f);
+                            material->SetProperty(MaterialProperty::TextureTilingY,     800.0f);
                             material->SetProperty(MaterialProperty::AnimationWaterFlow, 1.0f);
                             material->SetProperty(MaterialProperty::CullMode,           static_cast<float>(RHI_CullMode::None));
 
@@ -603,9 +606,11 @@ namespace spartan
 
                             renderable->SetMaterial(material);
                         }
+
+                        water->SetActive(false); // disable for now as it looks bad
                     }
 
-                    // vegetation_tree_2
+                    // tree
                     if (shared_ptr<Mesh> mesh = ResourceCache::Load<Mesh>("project\\terrain\\vegetation_tree_2\\tree.fbx"))
                     {
                         shared_ptr<Entity> entity = mesh->GetRootEntity().lock();
@@ -654,34 +659,45 @@ namespace spartan
                         }
                     }
 
-                    // vegetation_plant_1
-                    if (shared_ptr<Mesh> mesh = ResourceCache::Load<Mesh>("project\\terrain\\vegetation_plant_1\\ormbunke.obj"))
+                    // grass
                     {
-                        shared_ptr<Entity> entity = mesh->GetRootEntity().lock();
-                        entity->SetObjectName("plant_1");
-                        entity->SetScale(Vector3(1.0f, 1.0f, 1.0f));
+                        // create entity
+                        shared_ptr<Entity> entity = World::CreateEntity();
+                        entity->SetObjectName("grass");
                         entity->SetParent(m_default_terrain);
 
-                        if (Entity* child = entity->GetDescendantByName("Plane.010"))
-                        {
-                            Renderable* renderable = child->GetComponent<Renderable>().get();
-                            renderable->SetFlag(RenderableFlags::CastsShadows, false); // cheaper and screen space shadows are enough
+                        // create a mesh with a grass blade
+                        m_default_grass_patch = make_shared<Mesh>();
+                        vector<RHI_Vertex_PosTexNorTan> vertices;
+                        vector<uint32_t> indices;
+                        geometry_generation::generate_grass_blade(&vertices, &indices);                                                       // generate grass blade
+                        m_default_grass_patch->AddGeometry(vertices, indices);
+                        m_default_grass_patch->SetFlag(static_cast<uint32_t>(MeshFlags::PostProcessOptimize), false);                         // geometry is made to spec, don't optimize
+                        m_default_grass_patch->SetResourceFilePath(ResourceCache::GetProjectDirectory() + "standard_cube" + EXTENSION_MODEL); // silly, need to remove that
+                        m_default_grass_patch->PostProcess();                                                                                 // aabb, gpu buffers, etc.
 
-                            // create material as the model doesn't do it
-                            shared_ptr<Material> material = make_shared<Material>();
-                            material->SetResourceFilePath("project\\terrain\\vegetation_plant_1\\ormbunke" + string(EXTENSION_MATERIAL));
-                            material->SetColor(Color::standard_white);
-                            material->SetTexture(MaterialTextureType::Color,              "project\\terrain\\vegetation_plant_1\\ormbunke.png");
-                            material->SetProperty(MaterialProperty::SubsurfaceScattering, 0.0f);
-                            material->SetProperty(MaterialProperty::AnimationFoliageWind, 1.0f);
-                            material->SetProperty(MaterialProperty::CullMode,             static_cast<float>(RHI_CullMode::None));
-                            renderable->SetMaterial(material);
+                        // generate instances
+                        vector<Matrix> instances;
+                        terrain->GenerateTransforms(&instances, 20000000, TerrainProp::Grass);
 
-                            // generate instances
-                            vector<Matrix> instances;
-                            terrain->GenerateTransforms(&instances, 20000, TerrainProp::Plant);
-                            renderable->SetInstances(instances);
-                        }
+                        // add renderable component
+                        Renderable* renderable = entity->AddComponent<Renderable>().get();
+                        renderable->SetGeometry(m_default_grass_patch.get());
+                        renderable->SetFlag(RenderableFlags::CastsShadows, false); // screen space shadows are enough
+                        renderable->SetInstances(instances);
+
+                        // create a material
+                        shared_ptr<Material> material = make_shared<Material>();
+                        material->SetResourceFilePath(ResourceCache::GetProjectDirectory() + "grass_blade_material" + string(EXTENSION_MATERIAL));
+                        material->SetProperty(MaterialProperty::GrassBlade, 1.0f);
+                        material->SetProperty(MaterialProperty::Roughness, 0.6f);
+                        material->SetProperty(MaterialProperty::Clearcoat, 1.0f);
+                        material->SetProperty(MaterialProperty::Clearcoat_Roughness, 0.7f);
+                        material->SetProperty(MaterialProperty::CullMode, static_cast<float>(RHI_CullMode::None));
+                        material->SetColor(Color::standard_white);
+                        renderable->SetMaterial(material);
+
+                        renderable->SetMaxRenderDistance(250.0f);
                     }
                 }
             }
@@ -692,7 +708,7 @@ namespace spartan
             // set the mood
             create_camera(Vector3(19.2692f, 2.65f, 0.1677f), Vector3(-18.0f, -90.0f, 0.0f));
             create_sun(LightIntensity::black_hole, false);
-            create_music("project\\music\\jake_chudnow_olive.mp3");
+            create_music("project\\music\\jake_chudnow_olive.wav");
             Renderer::SetWind(Vector3(0.0f, 0.2f, 1.0f) * 0.1f);
 
             // point light
@@ -805,7 +821,7 @@ namespace spartan
         {
             create_camera(Vector3(-100.0f, 15.0f, -32.0f), Vector3(0.0f, 90.0f, 0.0f));
             create_sun(LightIntensity::sky_sunlight_noon, false);
-            create_music("project\\music\\doom_e1m1.mp3");
+            create_music("project\\music\\doom_e1m1.wav");
 
             if (shared_ptr<Mesh> mesh = ResourceCache::Load<Mesh>("project\\models\\doom_e1m1\\doom_E1M1.obj"))
             {
@@ -1069,6 +1085,7 @@ namespace spartan
         m_default_light_directional   = nullptr;
         m_default_terrain             = nullptr;
         m_default_car                 = nullptr;
+        m_default_grass_patch         = nullptr;
     }
 
     void Game::Tick()
@@ -1173,7 +1190,7 @@ namespace spartan
                         inside_the_car = false;
                     }
 
-                    // enable/disabe car/camera control
+                    // enable/disable car/camera control
                     camera->GetComponent<Camera>()->SetFlag(CameraFlags::CanBeControlled, !inside_the_car);
                     m_default_car->AddComponent<PhysicsBody>()->GetCar()->SetControlEnabled(inside_the_car);
 
@@ -1218,6 +1235,13 @@ namespace spartan
 
     void Game::Load(DefaultWorld default_world)
     {
+        // shutdown current world/logic
+        Game::Shutdown();
+
+        // clear all entities and their resources (and memory)
+        World::Clear();
+
+        // load whatever needs to be loaded
         ThreadPool::AddTask([default_world]()
         {
             ProgressTracker::SetGlobalLoadingState(true);

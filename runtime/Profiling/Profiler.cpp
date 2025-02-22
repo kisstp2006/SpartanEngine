@@ -425,41 +425,41 @@ namespace spartan
     
             snprintf(metrics_buffer, sizeof(metrics_buffer),
                 "FPS:\t\t\t%.1f\n"
-                "Time:\t\t\t%.2f ms\n"
-                "Frame:\t\t%llu\n\n"
-                "\t\t\t\tavg\t\tmin\t\tmax\t\tlast\n"
+                "Time:\t\t%.2f ms\n"
+                "Frame:\t%llu\n\n"
+                "\t\t\t\tavg\t\t\tmin\t\t\tmax\t\tlast\n"
                 "Total:\t\t%05.2f\t\t%05.2f\t\t%05.2f\t\t%05.2f ms\n"
                 "CPU:\t\t%05.2f\t\t%05.2f\t\t%05.2f\t\t%05.2f ms\n"
                 "GPU:\t\t%05.2f\t\t%05.2f\t\t%05.2f\t\t%05.2f ms\n\n"
                 "GPU\n"
-                "Name:\t\t\t%s\n"
-                "Memory:\t\t%u/%u MB\n"
-                "API:\t\t\t\t\t%s\t%s\n"
-                "Driver:\t\t\t%s\t\t%s\n\n"
+                "Name:\t\t%s\n"
+                "Memory:\t%u/%u MB\n"
+                "API:\t\t\t\t%s\t%s\n"
+                "Driver:\t\t%s\t\t%s\n\n"
                 "CPU\n"
-                "Name:\t\t\t\t\t\t%s\n"
-                "Threads:\t\t\t\t\t%u\n"
+                "Name:\t\t\t\t\t%s\n"
+                "Threads:\t\t\t\t%u\n"
                 "Worker threads:\t%u/%u\n"
                 #ifdef __AVX2__
-                "AVX2:\t\t\t\t\t\t\tYes\n"
+                "AVX2:\t\t\t\t\t\tYes\n"
                 #else
-                "AVX2:\t\t\t\t\t\t\tNo\n"
+                "AVX2:\t\t\t\t\t\tNo\n"
                 #endif
                 "\nDisplay\n"
                 "Name:\t\t\t%s\n"
-                "Hz:\t\t\t\t\t%u\n"
+                "Hz:\t\t\t\t\t%.1f\n"
                 "HDR:\t\t\t\t%s\n"
                 "Max nits:\t\t%u\n"
                 "Render:\t\t\t%u x %u - %.0f%%\n"
                 "Output:\t\t\t%u x %u\n"
                 "Viewport:\t\t%u x %u\n\n"
                 "Graphics API\n"
-                "Draw:\t\t\t\t\t\t\t\t\t\t\t%u\n"
-                "Index buffer bindings:\t\t\t%u\n"
+                "Draw:\t\t\t\t\t\t\t\t\t\t%u\n"
+                "Index buffer bindings:\t\t%u\n"
                 "Vertex buffer bindings:\t\t%u\n"
                 "Barriers:\t\t\t\t\t\t\t\t\t%u\n"
-                "Pipelines:\t\t\t\t\t\t\t\t\t%u\n"
-                "Descriptor set capacity:\t\t%u/%u",
+                "Pipelines:\t\t\t\t\t\t\t\t%u\n"
+                "Descriptor set capacity:\t%u/%u",
 
                 m_fps,
                 time_frame_avg,

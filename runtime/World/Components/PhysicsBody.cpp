@@ -34,7 +34,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "../../Physics/BulletPhysicsHelper.h"
 #include "../../Rendering/Renderer.h"
 #include "../../Core/ProgressTracker.h"
-#include "../../Core/GeometryProcessing.h"
+#include "../../Geometry/GeometryProcessing.h"
 SP_WARNINGS_OFF
 #include <BulletDynamics/Dynamics/btRigidBody.h>
 #include <BulletCollision/CollisionShapes/btSphereShape.h>
@@ -829,7 +829,7 @@ namespace spartan
             case PhysicsShape::Capsule:
             {
                 float radius          = max(size.x, size.z) * 0.5f;
-                float height          = size.y - 2.0f * radius;                       // exclude spherical caps from the cylindrical height
+                float height          = size.y - 2.0f * radius;               // exclude spherical caps from the cylindrical height
                 float sphere_volume   = (4.0f / 3.0f) * pi * powf(radius, 3); // spherical caps
                 float cylinder_volume = pi * powf(radius, 2) * height;        // cylindrical body
                 volume                = sphere_volume + cylinder_volume;
@@ -856,15 +856,15 @@ namespace spartan
                 }
 
                 btHeightfieldTerrainShape* shape_local = new btHeightfieldTerrainShape(
-                    terrain->GetHeightMap()->GetWidth(),  // width
-                    terrain->GetHeightMap()->GetHeight(), // length
-                    terrain->GetHeightData(),             // data - row major
-                    1.0f,                                 // height scale
-                    terrain->GetMinY(),                   // min height
-                    terrain->GetMaxY(),                   // max height
-                    1,                                    // up axis (0=x, 1=y, 2=z)
-                    PHY_FLOAT,                            // data type
-                    false                                 // flip quad edges or not
+                    terrain->GetWidth(),      // width
+                    terrain->GetHeight(),     // length
+                    terrain->GetHeightData(), // data - row major
+                    1.0f,                     // height scale
+                    terrain->GetMinY(),       // min height
+                    terrain->GetMaxY(),       // max height
+                    1,                        // up axis (0=x, 1=y, 2=z)
+                    PHY_FLOAT,                // data type
+                    false                     // flip quad edges or not
                 );
                 
                 shape_local->setLocalScaling(vector_to_bt(size));

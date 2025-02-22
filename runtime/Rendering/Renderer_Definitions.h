@@ -59,7 +59,6 @@ namespace spartan
         Upsampling,
         Sharpness,
         Hdr,
-        Exposure,
         WhitePoint,
         Gamma,
         Vsync,
@@ -133,16 +132,13 @@ namespace spartan
         lutIbl      = 15,
         environment = 16,
         ssao        = 17,
-        ssr         = 18,
-        frame       = 19,
-        tex         = 20,
-        tex2        = 21,
-        font_atlas  = 22,
+        tex         = 18,
+        tex2        = 19,
 
         // bindless
-        material_textures   = 23,
-        material_parameters = 24,
-        light_parameters    = 25
+        material_textures   = 20,
+        material_parameters = 21,
+        light_parameters    = 22
     };
 
     enum class Renderer_BindingsUav

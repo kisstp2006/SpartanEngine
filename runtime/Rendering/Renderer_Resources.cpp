@@ -24,7 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "Window.h"
 #include "Renderer.h"
 #include "Material.h"
-#include "../Core/GeometryProcessing.h"
+#include "../Geometry/GeometryGeneration.h"
 #include "../World/Components/Light.h"
 #include "../Resource/ResourceCache.h"
 #include "../Display/Display.h"
@@ -167,7 +167,7 @@ namespace spartan
             }
         }
 
-        RHI_Device::UpdateBindlessResources(nullptr, nullptr, nullptr, &samplers);
+        Renderer::BindlessUpdateSamplers();
     }
 
     void Renderer::CreateRenderTargets(const bool create_render, const bool create_output, const bool create_dynamic)
@@ -266,8 +266,9 @@ namespace spartan
             render_target(Renderer_RenderTarget::skysphere) = make_shared<RHI_Texture>(RHI_Texture_Type::Type2D, 4096, 4096, 1, mip_count, RHI_Format::R11G11B10_Float, flags | RHI_Texture_PerMipViews, "skysphere");
         }
 
-        RHI_Device::QueueWaitAll();
+#ifdef _MSC_VER
         RHI_FidelityFX::Resize(GetResolutionRender(), GetResolutionOutput());
+#endif
     }
 
     void Renderer::CreateShaders()
@@ -481,7 +482,8 @@ namespace spartan
         const string dir_font = ResourceCache::GetResourceDirectory(ResourceDirectory::Fonts) + "\\";
 
         // load a font
-        standard_font = make_shared<Font>(dir_font + "OpenSans/OpenSans-Medium.ttf", static_cast<uint32_t>(11 * Window::GetDpiScale()), Color(0.9f, 0.9f, 0.9f, 1.0f));
+        uint32_t size = static_cast<uint32_t>(10 * Window::GetDpiScale());
+        standard_font = make_shared<Font>(dir_font + "OpenSans/OpenSans-Medium.ttf", size, Color(0.9f, 0.9f, 0.9f, 1.0f));
     }
 
     void Renderer::CreateStandardMeshes()
@@ -495,33 +497,33 @@ namespace spartan
 
             if (type == MeshType::Cube)
             {
-                geometry_processing::generate_cube(&vertices, &indices);
+                geometry_generation::generate_cube(&vertices, &indices);
                 mesh->SetResourceFilePath(project_directory + "standard_cube" + EXTENSION_MODEL);
             }
             else if (type == MeshType::Quad)
             {
-                geometry_processing::generate_quad(&vertices, &indices);
+                geometry_generation::generate_quad(&vertices, &indices);
                 mesh->SetResourceFilePath(project_directory + "standard_quad" + EXTENSION_MODEL);
             }
             else if (type == MeshType::Grid)
             {
                 uint32_t resolution = 40;
-                geometry_processing::generate_grid(&vertices, &indices, resolution);
+                geometry_generation::generate_grid(&vertices, &indices, resolution);
                 mesh->SetResourceFilePath(project_directory + "standard_grid" + EXTENSION_MODEL);
             }
             else if (type == MeshType::Sphere)
             {
-                geometry_processing::generate_sphere(&vertices, &indices);
+                geometry_generation::generate_sphere(&vertices, &indices);
                 mesh->SetResourceFilePath(project_directory + "standard_sphere" + EXTENSION_MODEL);
             }
             else if (type == MeshType::Cylinder)
             {
-                geometry_processing::generate_cylinder(&vertices, &indices);
+                geometry_generation::generate_cylinder(&vertices, &indices);
                 mesh->SetResourceFilePath(project_directory + "standard_cylinder" + EXTENSION_MODEL);
             }
             else if (type == MeshType::Cone)
             {
-                geometry_processing::generate_cone(&vertices, &indices);
+                geometry_generation::generate_cone(&vertices, &indices);
                 mesh->SetResourceFilePath(project_directory + "standard_cone" + EXTENSION_MODEL);
             }
 
@@ -574,7 +576,7 @@ namespace spartan
         // misc
         {
             standard_texture(Renderer_StandardTexture::Checkerboard) = make_shared<RHI_Texture>(dir_texture + "no_texture.png");
-            standard_texture(Renderer_StandardTexture::Foam) = make_shared<RHI_Texture>(dir_texture + "foam.jpg");
+            standard_texture(Renderer_StandardTexture::Foam)         = make_shared<RHI_Texture>(dir_texture + "foam.jpg");
         }
     }
 
@@ -621,6 +623,11 @@ namespace spartan
         return buffers;
     }
 
+    array<shared_ptr<RHI_Sampler>, static_cast<uint32_t>(Renderer_Sampler::Max)>& Renderer::GetSamplers()
+    {
+        return samplers;
+    }
+
     RHI_RasterizerState* Renderer::GetRasterizerState(const Renderer_RasterizerState type)
     {
         return rasterizer_states[static_cast<uint8_t>(type)].get();
@@ -644,11 +651,6 @@ namespace spartan
     RHI_Shader* Renderer::GetShader(const Renderer_Shader type)
     {
         return shaders[static_cast<uint8_t>(type)].get();
-    }
-
-    RHI_Sampler* Renderer::GetSampler(const Renderer_Sampler type)
-    {
-        return samplers[static_cast<uint8_t>(type)].get();
     }
 
     RHI_Buffer* Renderer::GetBuffer(const Renderer_Buffer type)
@@ -675,4 +677,6 @@ namespace spartan
     {
         return standard_material;
     }
+
+    
 }

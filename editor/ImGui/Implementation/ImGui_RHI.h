@@ -41,7 +41,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "RHI/RHI_RasterizerState.h"
 #include "RHI/RHI_DepthStencilState.h"
 #include <Debugging.h>
-#include <SDL_video.h>
+SP_WARNINGS_OFF
+#include <SDL3/SDL_video.h>
+SP_WARNINGS_ON
 //======================================
 
 namespace ImGui::RHI
@@ -54,7 +56,7 @@ namespace ImGui::RHI
 
     namespace
     {
-        const uint32_t buffer_count = 6;
+        const uint32_t buffer_count = 8;
 
         struct ViewportRhiResources
         {

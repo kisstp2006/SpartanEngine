@@ -46,7 +46,6 @@ namespace spartan
         static void* GetQueueRhiResource(const RHI_Queue_Type type);
 
         // descriptors
-        static void CreateDescriptorPool();
         static void AllocateDescriptorSet(void*& resource, RHI_DescriptorSetLayout* descriptor_set_layout, const std::vector<RHI_Descriptor>& descriptors);
         static std::unordered_map<uint64_t, RHI_DescriptorSet>& GetDescriptorSets();
         static void* GetDescriptorSet(const RHI_Device_Bindless_Resource resource_type);
@@ -101,21 +100,19 @@ namespace spartan
         static void MarkerBegin(RHI_CommandList* cmd_list, const char* name, const math::Vector4& color);
         static void MarkerEnd(RHI_CommandList* cmd_list);
 
+        // physical device
+        static void PhysicalDeviceRegister(const PhysicalDevice& physical_device);
+        static void PhysicalDeviceSetPrimary(const uint32_t index);
+        static std::vector<PhysicalDevice>& PhysicalDeviceGet();
+
         // misc
         static void SetResourceName(void* resource, const RHI_Resource_Type resource_type, const std::string name);
         static bool IsValidResolution(const uint32_t width, const uint32_t height);
         static uint32_t GetDescriptorType(const RHI_Descriptor& descriptor);
         static PhysicalDevice* GetPrimaryPhysicalDevice();
         static void SetVariableRateShading(const RHI_CommandList* cmd_list, const bool enabled);
- 
-    private:
-        // physical device
-        static void PhysicalDeviceDetect();
-        static void PhysicalDeviceRegister(const PhysicalDevice& physical_device);
-        static void PhysicalDeviceSelectPrimary();
-        static void PhysicalDeviceSetPrimary(const uint32_t index);
-        static std::vector<PhysicalDevice>& PhysicalDeviceGet();
 
+    private:
         // properties
         static float m_timestamp_period;
         static uint64_t m_min_uniform_buffer_offset_alignment;
